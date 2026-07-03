@@ -37,6 +37,29 @@ const weekLabel = (mon) => {
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
+// Count consecutive school days (Mon–Fri) up to today where the student had
+// at least one approved lesson. Weekends are skipped, not streak-breaking.
+const calcStreak = (answers, studentId) => {
+  const approvedDates = new Set(
+    answers.filter(a => a.studentId === studentId && a.status === 'approved').map(a => a.date)
+  );
+  let streak = 0;
+  const d = new Date(TODAY + 'T12:00:00');
+  // If today has no approved work yet, start counting from the most recent prior school day
+  // so an in-progress today doesn't show a broken streak.
+  if (!approvedDates.has(toDate(d))) {
+    d.setDate(d.getDate() - 1);
+  }
+  // Walk backwards up to 200 days
+  for (let i = 0; i < 200; i++) {
+    const dow = d.getDay();
+    if (dow === 0 || dow === 6) { d.setDate(d.getDate() - 1); continue; } // skip weekends
+    if (approvedDates.has(toDate(d))) { streak++; d.setDate(d.getDate() - 1); }
+    else break;
+  }
+  return streak;
+};
+
 // ─── DEFAULT DATA ─────────────────────────────────────────────────────────────
 const INIT = {
   gradeGroups: [
@@ -176,7 +199,7 @@ export default function App() {
   );
 
   const navItems = mode === 'parent'
-    ? [['today','📊 Today'], ['week','🗓 Week'], ['plan','📋 Plan'], ['review','✅ Review'], ['records','📄 Records'], ['export','📤 Export'], ['setup','⚙️ Setup']]
+    ? [['today','📊 Today'], ['week','🗓 Week'], ['plan','📋 Plan'], ['review','✅ Review'], ['progress','📈 Progress'], ['records','📄 Records'], ['export','📤 Export'], ['setup','⚙️ Setup']]
     : [['today','📅 Today']];
 
   const goToPlan = (ggId) => { setPGG(ggId); setView('plan'); };
@@ -236,6 +259,7 @@ export default function App() {
         {view==='week'  && mode==='parent'  && <WeekOverview db={db} weekMon={weekMon} setWk={setWk} onGoToPlan={goToPlan} />}
         {view==='plan'  && mode==='parent'  && <Planner db={db} mut={mut} weekMon={weekMon} setWk={setWk} activeGG={planGG} setActiveGG={setPGG} />}
         {view==='review'&& mode==='parent'  && <Review db={db} mut={mut} />}
+        {view==='progress'&& mode==='parent'  && <ProgressView db={db} />}
         {view==='records'&& mode==='parent'  && <RecordsView db={db} />}
         {view==='export'&& mode==='parent'  && <ExportView db={db} weekMon={weekMon} setWk={setWk} />}
         {view==='setup' && <Setup db={db} mut={mut} />}
@@ -398,6 +422,7 @@ function StudentToday({ db, stuId, setStu, mut }) {
   });
   const isWeekend = [0, 6].includes(dow);
   const totalPending = todayLessons.length + carryover.length;
+  const streak = calcStreak(db.answers, stuId);
 
   return (
     <div>
@@ -408,6 +433,12 @@ function StudentToday({ db, stuId, setStu, mut }) {
           <div style={{ fontFamily:'Georgia,serif', fontSize:21, fontWeight:'bold', color:C.navy }}>{student?.emoji} {student?.name}'s Day</div>
           <div style={{ fontSize:13, color:C.muted }}>{shortDate(TODAY)} · {gg?.name}</div>
         </div>
+        {streak >= 2 && (
+          <div style={{ textAlign:'center', flexShrink:0, background:'#FFF7ED', border:'1px solid #FED7AA', borderRadius:10, padding:'6px 12px' }}>
+            <div style={{ fontWeight:800, fontSize:20, color:'#EA580C', fontVariantNumeric:'tabular-nums' }}>🔥 {streak}</div>
+            <div style={{ fontSize:10, color:'#9A3412', fontWeight:600 }}>day streak</div>
+          </div>
+        )}
         {totalPending > 0 && (
           <div style={{ textAlign:'right', flexShrink:0 }}>
             <div style={{ fontWeight:800, fontSize:22, color: approved===todayLessons.length && carryover.length===0 ? C.green : C.navy, fontVariantNumeric:'tabular-nums' }}>
@@ -532,6 +563,7 @@ function StudentPicker({ db, setStu }) {
           const catchUp  = countCarryover(s, gg);
           const todayDow = new Date(TODAY + 'T12:00:00').getDay();
           const todayActs = (db.activities||[]).filter(a => a.studentId===s.id && (a.days||[]).includes(todayDow));
+          const streak = calcStreak(db.answers, s.id);
           return (
             <button key={s.id} onClick={() => setStu(s.id)} style={{
               ...card, border:'2px solid transparent', cursor:'pointer', textAlign:'left', padding:20, transition:'all .15s'
@@ -539,7 +571,14 @@ function StudentPicker({ db, setStu }) {
               onMouseEnter={e => { e.currentTarget.style.borderColor=C.gold; e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.12)'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor='transparent'; e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.08)'; }}
             >
-              <div style={{ fontSize:36, marginBottom:10 }}>{s.emoji}</div>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                <div style={{ fontSize:36, marginBottom:10 }}>{s.emoji}</div>
+                {streak >= 2 && (
+                  <div style={{ fontSize:13, fontWeight:800, color:'#EA580C', background:'#FFF7ED', border:'1px solid #FED7AA', borderRadius:8, padding:'3px 8px' }}>
+                    🔥 {streak}
+                  </div>
+                )}
+              </div>
               <div style={{ fontSize:17, fontWeight:700, color:C.navy }}>{s.name}</div>
               <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{gg?.name} · {s.family}</div>
               <div style={{ marginTop:10, fontSize:13 }}>
@@ -1885,7 +1924,7 @@ function StudentsTab({ db, mut }) {
 function CoursesTab({ db, mut }) {
   return (
     <div>
-      <div style={{ fontSize:13, color:C.muted, marginBottom:14 }}>Set the starting lesson # for each subject — the planner uses this when auto-numbering new lessons.</div>
+      <div style={{ fontSize:13, color:C.muted, marginBottom:14 }}>Set the starting lesson # and total lessons for each subject. Total feeds the progress bars on the Progress tab (RPC courses are typically 180).</div>
       {db.gradeGroups.map(gg => (
         <div key={gg.id} style={{ ...card, marginBottom:20 }}>
           <input value={gg.name} onChange={e=>mut(d=>{const g=d.gradeGroups.find(x=>x.id===gg.id);if(g)g.name=e.target.value;})}
@@ -1897,18 +1936,24 @@ function CoursesTab({ db, mut }) {
                 style={{ ...inp, width:46, textAlign:'center', fontSize:20, padding:5 }} />
               <input value={sub.name}
                 onChange={e=>mut(d=>{const g=d.gradeGroups.find(x=>x.id===gg.id);const s=g?.subjects.find(x=>x.id===sub.id);if(s)s.name=e.target.value;})}
-                style={{ ...inp, flex:1 }} placeholder="Subject name" />
+                style={{ ...inp, flex:1, minWidth:120 }} placeholder="Subject name" />
               <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
-                <label style={{ ...lbl, margin:0, whiteSpace:'nowrap' }}>Start L.</label>
+                <label style={{ ...lbl, margin:0, whiteSpace:'nowrap' }}>Start</label>
                 <input type="number" min={1} value={sub.startLesson}
                   onChange={e=>mut(d=>{const g=d.gradeGroups.find(x=>x.id===gg.id);const s=g?.subjects.find(x=>x.id===sub.id);if(s)s.startLesson=parseInt(e.target.value)||1;})}
-                  style={{ ...inp, width:70 }} />
+                  style={{ ...inp, width:60 }} />
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
+                <label style={{ ...lbl, margin:0, whiteSpace:'nowrap' }}>Total</label>
+                <input type="number" min={1} value={sub.totalLessons ?? 180}
+                  onChange={e=>mut(d=>{const g=d.gradeGroups.find(x=>x.id===gg.id);const s=g?.subjects.find(x=>x.id===sub.id);if(s)s.totalLessons=parseInt(e.target.value)||180;})}
+                  style={{ ...inp, width:64 }} />
               </div>
               <Btn onClick={()=>mut(d=>{const g=d.gradeGroups.find(x=>x.id===gg.id);if(g)g.subjects=g.subjects.filter(s=>s.id!==sub.id);})}
                 style={{ background:'#FEE2E2', color:C.red, padding:'6px 10px' }}>✕</Btn>
             </div>
           ))}
-          <Btn onClick={()=>mut(d=>{const g=d.gradeGroups.find(x=>x.id===gg.id);if(g)g.subjects.push({id:uid(),name:'New Subject',icon:'📖',color:'#64748B',startLesson:1});})}
+          <Btn onClick={()=>mut(d=>{const g=d.gradeGroups.find(x=>x.id===gg.id);if(g)g.subjects.push({id:uid(),name:'New Subject',icon:'📖',color:'#64748B',startLesson:1,totalLessons:180});})}
             style={{ background:'transparent', border:`1px dashed ${C.border}`, color:C.muted, marginTop:8 }}>+ Add Subject</Btn>
         </div>
       ))}
@@ -2003,6 +2048,70 @@ function TemplatesTab({ db, mut }) {
         onClick={() => mut(d => { if(!d.templates) d.templates=[]; const id=uid(); d.templates.push({id, name:'New template', hint:'', questions:['Question 1','Question 2','Question 3']}); setEditingId(id); setEN('New template'); setEQ('Question 1\nQuestion 2\nQuestion 3'); })}
         style={{ background:C.navy, color:'white', marginTop:4 }}
       >+ New Template</Btn>
+    </div>
+  );
+}
+
+// ─── PROGRESS VIEW ────────────────────────────────────────────────────────────
+function ProgressView({ db }) {
+  // For each student, compute per-subject progress based on highest approved lesson
+  const studentProgress = useMemo(() => {
+    return db.students.map(student => {
+      const gg = db.gradeGroups.find(g => g.id === student.gradeGroupId);
+      const subjects = (gg?.subjects || []).map(subj => {
+        // Highest approved lesson number for this student + subject
+        let highest = 0;
+        db.answers.forEach(a => {
+          if (a.studentId === student.id && a.subjectId === subj.id && a.status === 'approved' && a.lessonNum > highest) {
+            highest = a.lessonNum;
+          }
+        });
+        const total = subj.totalLessons ?? 180;
+        const pct = total > 0 ? Math.min(100, Math.round((highest / total) * 100)) : 0;
+        return { subj, highest, total, pct };
+      });
+      const overall = subjects.length
+        ? Math.round(subjects.reduce((s, x) => s + x.pct, 0) / subjects.length)
+        : 0;
+      return { student, gg, subjects, overall };
+    });
+  }, [db]);
+
+  return (
+    <div>
+      <div style={{ fontFamily:'Georgia,serif', fontSize:21, fontWeight:'bold', color:C.navy, marginBottom:4 }}>Course Progress</div>
+      <div style={{ fontSize:13, color:C.muted, marginBottom:20 }}>How far each student has gotten through their courses, based on approved lessons.</div>
+
+      {studentProgress.map(({ student, subjects, overall }) => (
+        <div key={student.id} style={{ ...card, marginBottom:18 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+            <span style={{ fontSize:28 }}>{student.emoji}</span>
+            <div style={{ flex:1 }}>
+              <div style={{ fontWeight:700, fontSize:16, color:C.navy }}>{student.name}</div>
+              <div style={{ fontSize:12, color:C.muted }}>{student.family}</div>
+            </div>
+            <div style={{ textAlign:'right' }}>
+              <div style={{ fontWeight:800, fontSize:22, color: overall>=100?C.green:C.navy, fontVariantNumeric:'tabular-nums' }}>{overall}%</div>
+              <div style={{ fontSize:11, color:C.muted }}>overall</div>
+            </div>
+          </div>
+
+          {subjects.map(({ subj, highest, total, pct }) => (
+            <div key={subj.id} style={{ marginBottom:12 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:4 }}>
+                <span style={{ fontSize:13, fontWeight:600, color:'#333' }}>{subj.icon} {subj.name}</span>
+                <span style={{ fontSize:12, color:C.muted, fontVariantNumeric:'tabular-nums' }}>
+                  {highest > 0 ? `Lesson ${highest} of ${total}` : `Not started · ${total} lessons`}
+                  <span style={{ marginLeft:8, fontWeight:700, color: pct>=100?C.green:subj.color }}>{pct}%</span>
+                </span>
+              </div>
+              <div style={{ height:8, background:'#E5E7EB', borderRadius:4, overflow:'hidden' }}>
+                <div style={{ height:'100%', width:`${pct}%`, background: pct>=100 ? C.green : subj.color, borderRadius:4, transition:'width .5s ease' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
