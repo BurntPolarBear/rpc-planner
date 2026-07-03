@@ -183,9 +183,21 @@ export default function App() {
 
   return (
     <div style={{ fontFamily:'system-ui,-apple-system,sans-serif', minHeight:'100vh', background:C.bg }}>
+      {/* Global responsive rules */}
+      <style>{`
+        * { box-sizing: border-box; }
+        @media (max-width: 560px) {
+          .lesson-editor-grid { grid-template-columns: 1fr !important; }
+          .app-main { padding: 14px 12px !important; }
+          .app-header-title { font-size: 16px !important; }
+        }
+        @media (max-width: 400px) {
+          .app-main { padding: 12px 9px !important; }
+        }
+      `}</style>
       {/* Header */}
       <header style={{ background:C.navy, height:56, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 20px' }}>
-        <span style={{ fontFamily:'Georgia,serif', fontSize:18, color:'white', fontWeight:'bold', letterSpacing:'-0.3px' }}>
+        <span className="app-header-title" style={{ fontFamily:'Georgia,serif', fontSize:18, color:'white', fontWeight:'bold', letterSpacing:'-0.3px' }}>
           📋 RPC Planner
         </span>
         <Btn
@@ -218,7 +230,7 @@ export default function App() {
       </nav>
 
       {/* Main */}
-      <main style={{ maxWidth:960, margin:'0 auto', padding:'20px 16px' }}>
+      <main className="app-main" style={{ maxWidth:960, margin:'0 auto', padding:'20px 16px' }}>
         {view==='today' && mode==='student' && <StudentToday db={db} stuId={stuId} setStu={setStu} mut={mut} />}
         {view==='today' && mode==='parent'  && <Overview db={db} />}
         {view==='week'  && mode==='parent'  && <WeekOverview db={db} weekMon={weekMon} setWk={setWk} onGoToPlan={goToPlan} />}
@@ -509,7 +521,7 @@ function StudentPicker({ db, setStu }) {
     <div>
       <div style={{ fontFamily:'Georgia,serif', fontSize:24, fontWeight:'bold', color:C.navy, marginBottom:4 }}>Good morning! 👋</div>
       <div style={{ fontSize:14, color:C.muted, marginBottom:24 }}>{shortDate(TODAY)} — Who are you?</div>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:14 }}>
         {db.students.map(s => {
           const gg       = db.gradeGroups.find(g => g.id===s.gradeGroupId);
           const planKey  = `${gg?.id}:${getMon(TODAY)}`;
@@ -772,7 +784,7 @@ function Overview({ db }) {
         return (
           <div key={gg.id} style={{ marginBottom:28 }}>
             <div style={{ fontSize:11, fontWeight:800, color:'#aaa', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:12 }}>{gg.name}</div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:12 }}>
               {students.map(st => {
                 const subs     = db.answers.filter(a => a.studentId===st.id && a.date===TODAY);
                 const approved = subs.filter(a => a.status==='approved').length;
@@ -1238,8 +1250,8 @@ function LessonEditorPanel({ lesson, subj, date, templates, onSaveTemplate, onSa
         <button onClick={onClose} style={{ background:'none', border:`1px solid ${C.border}`, borderRadius:7, padding:'5px 12px', cursor:'pointer', fontSize:12, color:C.muted }}>✕ Close</button>
       </div>
 
-      {/* Two-column layout */}
-      <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:20 }}>
+      {/* Two-column layout (stacks on mobile via .lesson-editor-grid) */}
+      <div className="lesson-editor-grid" style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:20 }}>
         {/* Left: controls */}
         <div>
           <label style={lbl}>Lesson #</label>
@@ -2242,7 +2254,7 @@ function ExportView({ db, weekMon, setWk }) {
       </div>
 
       {/* Export options */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:22 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:14, marginBottom:22 }}>
         <div style={{ ...card, display:'flex', flexDirection:'column', gap:10 }}>
           <div style={{ fontSize:28 }}>📅</div>
           <div style={{ fontWeight:700, fontSize:15, color:C.navy }}>Calendar (.ics)</div>
