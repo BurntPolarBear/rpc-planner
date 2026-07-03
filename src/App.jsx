@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -176,7 +176,7 @@ export default function App() {
   );
 
   const navItems = mode === 'parent'
-    ? [['today','📊 Today'], ['week','🗓 Week'], ['plan','📋 Plan'], ['review','✅ Review'], ['export','📤 Export'], ['setup','⚙️ Setup']]
+    ? [['today','📊 Today'], ['week','🗓 Week'], ['plan','📋 Plan'], ['review','✅ Review'], ['records','📄 Records'], ['export','📤 Export'], ['setup','⚙️ Setup']]
     : [['today','📅 Today']];
 
   const goToPlan = (ggId) => { setPGG(ggId); setView('plan'); };
@@ -224,6 +224,7 @@ export default function App() {
         {view==='week'  && mode==='parent'  && <WeekOverview db={db} weekMon={weekMon} setWk={setWk} onGoToPlan={goToPlan} />}
         {view==='plan'  && mode==='parent'  && <Planner db={db} mut={mut} weekMon={weekMon} setWk={setWk} activeGG={planGG} setActiveGG={setPGG} />}
         {view==='review'&& mode==='parent'  && <Review db={db} mut={mut} />}
+        {view==='records'&& mode==='parent'  && <RecordsView db={db} />}
         {view==='export'&& mode==='parent'  && <ExportView db={db} weekMon={weekMon} setWk={setWk} />}
         {view==='setup' && <Setup db={db} mut={mut} />}
       </main>
@@ -1539,7 +1540,7 @@ function Setup({ db, mut }) {
     <div>
       <div style={{ fontFamily:'Georgia,serif', fontSize:22, fontWeight:'bold', color:C.navy, marginBottom:16 }}>Settings</div>
       <div style={{ display:'flex', gap:8, marginBottom:20, flexWrap:'wrap' }}>
-        {[['students','👤 Students'],['courses','📚 Courses'],['templates','📋 Templates'],['activities','🏃 Activities'],['pin','🔒 Parent PIN']].map(([id,label])=>(
+        {[['students','👤 Students'],['courses','📚 Courses'],['templates','📋 Templates'],['activities','🏃 Activities'],['pin','🔒 Parent PIN'],['backup','💾 Backup']].map(([id,label])=>(
           <Btn key={id} onClick={()=>setTab(id)} style={{ background:tab===id?C.navy:'white', color:tab===id?'white':C.muted, border:`1px solid ${C.border}` }}>{label}</Btn>
         ))}
       </div>
@@ -1548,6 +1549,7 @@ function Setup({ db, mut }) {
       {tab==='templates'  && <TemplatesTab db={db} mut={mut} />}
       {tab==='activities' && <ActivitiesTab db={db} mut={mut} />}
       {tab==='pin'        && <PinTab db={db} mut={mut} />}
+      {tab==='backup'     && <BackupTab db={db} mut={mut} />}
     </div>
   );
 }
@@ -1666,6 +1668,116 @@ function ActivitiesTab({ db, mut }) {
       ))}
 
       <Btn onClick={addActivity} style={{ background:C.navy, color:'white' }}>+ Add Activity</Btn>
+    </div>
+  );
+}
+
+// ─── BACKUP TAB ───────────────────────────────────────────────────────────────
+function BackupTab({ db, mut }) {
+  const [msg, setMsg]   = useState(null);
+  const [confirm, setConfirm] = useState(false);
+  const fileRef = useRef(null);
+
+  const stats = {
+    students:   db.students?.length || 0,
+    lessons:    Object.values(db.plans||{}).reduce((a,wk)=>a+Object.values(wk).reduce((b,ls)=>b+ls.length,0),0),
+    answers:    db.answers?.length || 0,
+    templates:  db.templates?.length || 0,
+    activities: db.activities?.length || 0,
+  };
+
+  const download = () => {
+    const payload = { ...db, _backupDate: new Date().toISOString(), _version: 1 };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `rpc-planner-backup-${toDate()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMsg({ type:'ok', text:'Backup downloaded. Keep it somewhere safe.' });
+    setTimeout(()=>setMsg(null), 4000);
+  };
+
+  const handleFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        if (!parsed.gradeGroups || !Array.isArray(parsed.students)) {
+          setMsg({ type:'err', text:'That file doesn\'t look like a valid planner backup.' });
+          return;
+        }
+        // Strip backup metadata before restoring
+        const { _backupDate, _version, ...clean } = parsed;
+        mut(d => { Object.keys(d).forEach(k => delete d[k]); Object.assign(d, clean); });
+        setMsg({ type:'ok', text:'Backup restored successfully! All data has been replaced.' });
+        setConfirm(false);
+        setTimeout(()=>setMsg(null), 5000);
+      } catch {
+        setMsg({ type:'err', text:'Couldn\'t read that file — is it a valid backup?' });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = ''; // allow re-selecting same file
+  };
+
+  return (
+    <div style={{ maxWidth:520 }}>
+      {/* Download */}
+      <div style={{ ...card, marginBottom:16 }}>
+        <div style={{ fontSize:15, fontWeight:700, color:C.navy, marginBottom:6 }}>Download a backup</div>
+        <div style={{ fontSize:13, color:C.muted, marginBottom:16, lineHeight:1.6 }}>
+          Saves everything — students, courses, lesson plans, answers, templates, and activities — to a single file on your device. Do this before any big change, or every so often for peace of mind.
+        </div>
+        <div style={{ display:'flex', gap:16, flexWrap:'wrap', marginBottom:16, fontSize:12, color:C.muted }}>
+          <span><strong style={{ color:C.navy }}>{stats.students}</strong> students</span>
+          <span><strong style={{ color:C.navy }}>{stats.lessons}</strong> lessons</span>
+          <span><strong style={{ color:C.navy }}>{stats.answers}</strong> submissions</span>
+          <span><strong style={{ color:C.navy }}>{stats.templates}</strong> templates</span>
+          <span><strong style={{ color:C.navy }}>{stats.activities}</strong> activities</span>
+        </div>
+        <Btn onClick={download} style={{ background:C.navy, color:'white', width:'100%', padding:'11px 0' }}>
+          💾 Download Backup File
+        </Btn>
+      </div>
+
+      {/* Restore */}
+      <div style={{ ...card, border:`1px solid #FCA5A5` }}>
+        <div style={{ fontSize:15, fontWeight:700, color:C.navy, marginBottom:6 }}>Restore from a backup</div>
+        <div style={{ fontSize:13, color:C.muted, marginBottom:16, lineHeight:1.6 }}>
+          Replaces <strong>all current data</strong> with the contents of a backup file. This affects both families since everyone shares the same database — use it carefully.
+        </div>
+
+        {!confirm ? (
+          <Btn onClick={()=>setConfirm(true)} style={{ background:'#FEF2F2', color:C.red, border:'1px solid #FCA5A5', width:'100%', padding:'11px 0' }}>
+            ↺ Restore from File…
+          </Btn>
+        ) : (
+          <div style={{ background:'#FEF2F2', border:'1px solid #FCA5A5', borderRadius:8, padding:14 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:C.red, marginBottom:10 }}>
+              This will overwrite everything currently in the app. Are you sure?
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <Btn onClick={()=>fileRef.current?.click()} style={{ background:C.red, color:'white', flex:1 }}>
+                Yes, choose backup file
+              </Btn>
+              <Btn onClick={()=>setConfirm(false)} style={{ background:'white', color:C.muted, border:`1px solid ${C.border}` }}>
+                Cancel
+              </Btn>
+            </div>
+            <input ref={fileRef} type="file" accept="application/json,.json" onChange={handleFile} style={{ display:'none' }} />
+          </div>
+        )}
+      </div>
+
+      {msg && (
+        <div style={{ marginTop:16, background: msg.type==='ok' ? '#F0FDF4' : '#FEF2F2', border:`1px solid ${msg.type==='ok' ? '#86EFAC' : '#FCA5A5'}`, borderRadius:8, padding:'10px 14px', fontSize:13, color: msg.type==='ok' ? C.green : C.red }}>
+          {msg.text}
+        </div>
+      )}
     </div>
   );
 }
@@ -1879,6 +1991,130 @@ function TemplatesTab({ db, mut }) {
         onClick={() => mut(d => { if(!d.templates) d.templates=[]; const id=uid(); d.templates.push({id, name:'New template', hint:'', questions:['Question 1','Question 2','Question 3']}); setEditingId(id); setEN('New template'); setEQ('Question 1\nQuestion 2\nQuestion 3'); })}
         style={{ background:C.navy, color:'white', marginTop:4 }}
       >+ New Template</Btn>
+    </div>
+  );
+}
+
+// ─── RECORDS VIEW ─────────────────────────────────────────────────────────────
+function RecordsView({ db }) {
+  const [stuId, setStuId]   = useState('all');
+  const [fromD, setFromD]   = useState(() => { const d=new Date(TODAY+'T12:00:00'); d.setDate(d.getDate()-30); return toDate(d); });
+  const [toD, setToD]       = useState(TODAY);
+
+  // Build a per-student, per-date record of approved work within the range
+  const records = useMemo(() => {
+    const inRange = (date) => date >= fromD && date <= toD;
+    const students = stuId === 'all' ? db.students : db.students.filter(s => s.id === stuId);
+
+    return students.map(student => {
+      const gg = db.gradeGroups.find(g => g.id === student.gradeGroupId);
+      // Group approved submissions by date
+      const byDate = {};
+      db.answers
+        .filter(a => a.studentId === student.id && a.status === 'approved' && inRange(a.date))
+        .forEach(a => {
+          if (!byDate[a.date]) byDate[a.date] = [];
+          const subj = gg?.subjects.find(s => s.id === a.subjectId);
+          byDate[a.date].push({ subject: subj?.name || '—', icon: subj?.icon || '', lessonNum: a.lessonNum });
+        });
+      const dates = Object.keys(byDate).sort();
+      const totalLessons = dates.reduce((sum, d) => sum + byDate[d].length, 0);
+      return { student, gg, byDate, dates, daysCount: dates.length, totalLessons };
+    });
+  }, [db, stuId, fromD, toD]);
+
+  const grandDays    = records.reduce((s,r) => s + r.daysCount, 0);
+  const grandLessons = records.reduce((s,r) => s + r.totalLessons, 0);
+
+  const setPreset = (days) => {
+    const d = new Date(TODAY+'T12:00:00'); d.setDate(d.getDate()-days);
+    setFromD(toDate(d)); setToD(TODAY);
+  };
+
+  const fmtDate = (ds) => new Date(ds+'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+
+  return (
+    <div>
+      {/* Print styles — hide chrome, show only the records */}
+      <style>{`
+        @media print {
+          nav, header, .no-print { display: none !important; }
+          body { background: white !important; }
+          .record-sheet { box-shadow: none !important; border: none !important; }
+        }
+      `}</style>
+
+      <div className="no-print" style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:12, marginBottom:18 }}>
+        <div>
+          <div style={{ fontFamily:'Georgia,serif', fontSize:21, fontWeight:'bold', color:C.navy, marginBottom:2 }}>Work Records</div>
+          <div style={{ fontSize:13, color:C.muted }}>Completed &amp; approved work — useful for attendance and progress documentation.</div>
+        </div>
+        <Btn onClick={() => window.print()} style={{ background:C.navy, color:'white' }}>🖨 Print / Save PDF</Btn>
+      </div>
+
+      {/* Controls */}
+      <div className="no-print" style={{ ...card, marginBottom:20, display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-end' }}>
+        <div>
+          <label style={lbl}>Student</label>
+          <select value={stuId} onChange={e=>setStuId(e.target.value)} style={{ ...inp, width:'auto' }}>
+            <option value="all">All students</option>
+            {db.students.map(s => <option key={s.id} value={s.id}>{s.emoji} {s.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={lbl}>From</label>
+          <input type="date" value={fromD} onChange={e=>setFromD(e.target.value)} style={{ ...inp }} />
+        </div>
+        <div>
+          <label style={lbl}>To</label>
+          <input type="date" value={toD} onChange={e=>setToD(e.target.value)} style={{ ...inp }} />
+        </div>
+        <div style={{ display:'flex', gap:6 }}>
+          <Btn onClick={()=>setPreset(7)}  style={{ background:'white', border:`1px solid ${C.border}`, color:C.muted, fontSize:12 }}>Last 7d</Btn>
+          <Btn onClick={()=>setPreset(30)} style={{ background:'white', border:`1px solid ${C.border}`, color:C.muted, fontSize:12 }}>30d</Btn>
+          <Btn onClick={()=>setPreset(90)} style={{ background:'white', border:`1px solid ${C.border}`, color:C.muted, fontSize:12 }}>90d</Btn>
+        </div>
+      </div>
+
+      {/* Summary banner */}
+      <div style={{ background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:10, padding:'12px 16px', marginBottom:20, fontSize:14, color:'#1E40AF' }}>
+        <strong>{grandDays}</strong> school day{grandDays!==1?'s':''} · <strong>{grandLessons}</strong> lesson{grandLessons!==1?'s':''} completed
+        <span style={{ color:'#3B6FB5' }}> · {fmtDate(fromD)} – {fmtDate(toD)}</span>
+      </div>
+
+      {/* Per-student record sheets */}
+      {records.map(rec => (
+        <div key={rec.student.id} className="record-sheet" style={{ ...card, marginBottom:20 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, paddingBottom:12, borderBottom:`2px solid ${C.navy}` }}>
+            <span style={{ fontSize:26 }}>{rec.student.emoji}</span>
+            <div style={{ flex:1 }}>
+              <div style={{ fontWeight:700, fontSize:16, color:C.navy }}>{rec.student.name}</div>
+              <div style={{ fontSize:12, color:C.muted }}>{rec.gg?.name} · {rec.student.family}</div>
+            </div>
+            <div style={{ textAlign:'right' }}>
+              <div style={{ fontWeight:800, fontSize:18, color:C.navy, fontVariantNumeric:'tabular-nums' }}>{rec.daysCount} days</div>
+              <div style={{ fontSize:11, color:C.muted }}>{rec.totalLessons} lessons</div>
+            </div>
+          </div>
+
+          {rec.dates.length === 0 ? (
+            <div style={{ fontSize:13, color:C.muted, fontStyle:'italic', padding:'8px 0' }}>No approved work in this date range.</div>
+          ) : (
+            rec.dates.map(date => (
+              <div key={date} style={{ display:'flex', gap:12, padding:'8px 0', borderBottom:`1px solid #F0F0F0` }}>
+                <div style={{ flexShrink:0, width:130, fontSize:13, fontWeight:600, color:C.navy }}>{fmtDate(date)}</div>
+                <div style={{ flex:1, fontSize:13, color:'#444' }}>
+                  {rec.byDate[date].map((l,i) => (
+                    <span key={i} style={{ display:'inline-block', marginRight:14, marginBottom:2 }}>
+                      {l.icon} {l.subject} <span style={{ color:C.muted }}>L{l.lessonNum}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      ))}
     </div>
   );
 }
