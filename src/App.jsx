@@ -1500,6 +1500,17 @@ function SubCard({ sub, student, subj, lesson, questions, onApprove, onRevise })
 // ─── SETUP ────────────────────────────────────────────────────────────────────
 function Setup({ db, mut }) {
   const [tab, setTab] = useState('students');
+
+  const exportBackup = () => {
+    const dataStr = JSON.stringify(db, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+    const exportFileDefaultName = `rpc-planner-backup-${new Date().toISOString().slice(0,10)}.json`;
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+  };
+
   return (
     <div>
       <div style={{ fontFamily:'Georgia,serif', fontSize:22, fontWeight:'bold', color:C.navy, marginBottom:16 }}>Settings</div>
@@ -1508,6 +1519,15 @@ function Setup({ db, mut }) {
           <Btn key={id} onClick={()=>setTab(id)} style={{ background:tab===id?C.navy:'white', color:tab===id?'white':C.muted, border:`1px solid ${C.border}` }}>{label}</Btn>
         ))}
       </div>
+
+      {/* New Backup Button - always visible */}
+      <div style={{ marginBottom:20 }}>
+        <Btn onClick={exportBackup} style={{ background:C.green, color:'white' }}>
+          💾 Download Full Backup (JSON)
+        </Btn>
+        <div style={{ fontSize:12, color:C.muted, marginTop:4 }}>Save this file somewhere safe. You can import it later if needed.</div>
+      </div>
+
       {tab==='students'   && <StudentsTab db={db} mut={mut} />}
       {tab==='courses'    && <CoursesTab db={db} mut={mut} />}
       {tab==='templates'  && <TemplatesTab db={db} mut={mut} />}
@@ -1516,7 +1536,6 @@ function Setup({ db, mut }) {
     </div>
   );
 }
-
 // ─── ACTIVITIES TAB ───────────────────────────────────────────────────────────
 const ACT_COLORS = ['#EF4444','#F97316','#F59E0B','#10B981','#3B82F6','#8B5CF6','#EC4899','#14B8A6'];
 const DAY_LABELS = ['Su','M','T','W','Th','F','Sa']; // index = JS getDay()
