@@ -1261,6 +1261,34 @@ function LessonEditorPanel({ lesson, subj, date, templates, onSaveTemplate, onSa
   const [flash, setFlash] = useState(false);
   const [tmplFlash, setTF]= useState(false);
 
+  // AI question drafting
+  const [showAI, setShowAI]   = useState(false);
+  const [aiInput, setAiInput] = useState('');
+  const [aiCount, setAiCount] = useState(4);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
+
+  const generateQuestions = async () => {
+    if (!aiInput.trim()) { setAiError('Enter a lesson summary or topic first.'); return; }
+    setAiLoading(true); setAiError(null);
+    try {
+      const res = await fetch('/api/generate-questions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ summary: aiInput, subject: subj?.name || '', count: aiCount }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setAiError(data.error || 'Something went wrong.'); setAiLoading(false); return; }
+      const drafted = (data.questions || []).join('\n');
+      // Append to existing questions if any, else fill
+      setQt(prev => prev.trim() ? `${prev.trim()}\n${drafted}` : drafted);
+      setShowAI(false); setAiInput('');
+    } catch {
+      setAiError('Could not reach the AI. Check your connection and try again.');
+    }
+    setAiLoading(false);
+  };
+
   const questions = qt.split('\n').map(q=>q.trim()).filter(Boolean);
   const tasks     = tt.split('\n').map(t=>t.trim()).filter(Boolean);
 
@@ -1319,7 +1347,42 @@ function LessonEditorPanel({ lesson, subj, date, templates, onSaveTemplate, onSa
 
         {/* Right: questions + notes */}
         <div>
-          <label style={lbl}>Questions — one per line</label>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+            <label style={{ ...lbl, margin:0 }}>Questions — one per line</label>
+            <button type="button" onClick={()=>{ setShowAI(v=>!v); setAiError(null); }} style={{
+              background: showAI ? C.navy : '#EEF2FF', color: showAI ? 'white' : '#4338CA',
+              border:'none', borderRadius:6, padding:'4px 10px', fontSize:11, fontWeight:700, cursor:'pointer',
+            }}>
+              ✨ Draft with AI
+            </button>
+          </div>
+
+          {showAI && (
+            <div style={{ background:'#F5F3FF', border:'1px solid #DDD6FE', borderRadius:8, padding:12, marginBottom:12 }}>
+              <label style={lbl}>Lesson summary or topic</label>
+              <textarea value={aiInput} onChange={e=>setAiInput(e.target.value)}
+                style={{ ...inp, width:'100%', minHeight:60, resize:'vertical', fontSize:13, display:'block', marginBottom:8 }}
+                placeholder={"Paste a short summary of the lesson, or just the topic — e.g. 'The causes of the American Revolution: taxation without representation, the Boston Tea Party, and the Intolerable Acts.'"}
+              />
+              <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <label style={{ ...lbl, margin:0, whiteSpace:'nowrap' }}>How many</label>
+                  <select value={aiCount} onChange={e=>setAiCount(parseInt(e.target.value))} style={{ ...inp, width:'auto', padding:'6px 8px' }}>
+                    {[3,4,5,6].map(n=><option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <button type="button" onClick={generateQuestions} disabled={aiLoading} style={{
+                  background: aiLoading ? '#A5B4FC' : '#4F46E5', color:'white', border:'none', borderRadius:7,
+                  padding:'8px 16px', fontSize:13, fontWeight:700, cursor: aiLoading ? 'default' : 'pointer',
+                }}>
+                  {aiLoading ? 'Drafting…' : '✨ Generate Questions'}
+                </button>
+                {qt.trim() && <span style={{ fontSize:11, color:C.muted }}>Adds to your existing questions</span>}
+              </div>
+              {aiError && <div style={{ marginTop:8, fontSize:12, color:C.red }}>{aiError}</div>}
+            </div>
+          )}
+
           <textarea value={qt} onChange={e=>setQt(e.target.value)}
             style={{ ...inp, width:'100%', minHeight:90, resize:'vertical', fontSize:13, display:'block', marginBottom:14 }}
             placeholder={"What was the main cause of...?\nWho was the key figure in...?\nDescribe the significance of..."}
