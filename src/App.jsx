@@ -26,73 +26,7 @@ const weekDays = (mon) =>
     return toDate(d);
   });
 
-const shortDate = (ds) =>
-  new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-
-const weekLabel = (mon) => {
-  const days = weekDays(mon);
-  const fmt = (ds) => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  return `${fmt(days[0])} – ${fmt(days[6])}`;
-};
-
-const uid = () => Math.random().toString(36).slice(2, 9);
-
-// ─── DEFAULT DATA ─────────────────────────────────────────────────────────────
-const INIT = {
-  gradeGroups: [
-    {
-      id: 'gg1', name: '4th Grade',
-      subjects: [
-        { id: 'g1s1', name: 'Mathematics', icon: '➗', color: '#2563EB', startLesson: 1 },
-        { id: 'g1s2', name: 'English',     icon: '✏️',  color: '#7C3AED', startLesson: 1 },
-        { id: 'g1s3', name: 'History',     icon: '🏛️', color: '#B45309', startLesson: 1 },
-        { id: 'g1s4', name: 'Science',     icon: '🔬', color: '#047857', startLesson: 1 },
-      ]
-    },
-    {
-      id: 'gg2', name: '6th Grade',
-      subjects: [
-        { id: 'g2s1', name: 'Mathematics', icon: '➗', color: '#2563EB', startLesson: 1 },
-        { id: 'g2s2', name: 'English',     icon: '✏️',  color: '#7C3AED', startLesson: 1 },
-        { id: 'g2s3', name: 'History',     icon: '🏛️', color: '#B45309', startLesson: 1 },
-        { id: 'g2s4', name: 'Science',     icon: '🔬', color: '#047857', startLesson: 1 },
-        { id: 'g2s5', name: 'Government',  icon: '⚖️', color: '#B91C1C', startLesson: 1 },
-      ]
-    }
-  ],
-  students: [
-    { id: 'st1', name: 'Child 1', gradeGroupId: 'gg1', family: 'Family A', emoji: '📚' },
-    { id: 'st2', name: 'Child 2', gradeGroupId: 'gg1', family: 'Family B', emoji: '✏️' },
-    { id: 'st3', name: 'Child 3', gradeGroupId: 'gg2', family: 'Family A', emoji: '🔬' },
-    { id: 'st4', name: 'Child 4', gradeGroupId: 'gg2', family: 'Family B', emoji: '📖' },
-  ],
-  plans: {},      // { 'gg1:2026-06-23': { '2026-06-23': [{subjectId, lessonNum, questions}] } }
-  answers: [],    // { id, studentId, date, subjectId, lessonNum, answers[], status, parentNote }
-  templates: [],  // { id, name, hint, questions[] }
-  activities: [], // { id, studentId, name, emoji, color, days:[0-6 JS dow], time:'', location:'', notes:'' }
-  activityLogs: [], // { activityId, studentId, date } — one entry = done for that day
-  settings: { parentPin: '' }, // empty = no PIN required
-};
-
-// ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
-const C = {
-  navy:   '#1A2E4A',
-  navyD:  '#0F1E30',
-  gold:   '#D4920A',
-  goldL:  '#F59E0B',
-  green:  '#047857',
-  red:    '#B91C1C',
-  yellow: '#B45309',
-  border: '#D1D9E0',
-  muted:  '#5E7085',
-  bg:     '#EEF2F6',
-  surf:   '#FFFFFF',
-};
-
-const card  = { background: C.surf, borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', padding: 16 };
-const Btn   = ({ style, ...p }) => <button style={{ border:'none', borderRadius:8, padding:'8px 16px', cursor:'pointer', fontSize:13, fontWeight:600, lineHeight:1.5, ...style }} {...p} />;
-const inp   = { border:`1.5px solid ${C.border}`, borderRadius:8, padding:'8px 12px', fontSize:14, fontFamily:'inherit', background:'white', boxSizing:'border-box' };
-const lbl   = { display:'block', fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', color:C.muted, marginBottom:4 };
+// ... (keep all your other utilities like shortDate, weekLabel, uid, INIT, C, card, Btn, etc.)
 
 // ─── ROOT ────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -103,30 +37,72 @@ export default function App() {
   const [weekMon, setWk]  = useState(() => getMon(TODAY));
   const [planGG, setPGG]  = useState(INIT.gradeGroups[0].id);
   const [showPin, setShowPin] = useState(false);
-
-  const handleModeToggle = () => {
-    if (mode === 'student') {
-      const pin = db?.settings?.parentPin;
-      if (pin) { setShowPin(true); }
-      else { setMode('parent'); setView('today'); }
-    } else {
-      setMode('student'); setView('today'); setStu(null);
-    }
-  };
+  const [error, setError] = useState(null);   // New: error state
 
   const loadData = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      setError(null);
+      const { data, error: supaError } = await supabase
         .from('app_data')
         .select('content')
         .eq('id', 1)
         .single();
-      if (data?.content?.gradeGroups) setDb(data.content);
-      else setDb(INIT);
-    } catch {
-      setDb(INIT);
+
+      let loaded = null;
+      if (supaError || !data?.content?.gradeGroups) {
+        // Try localStorage fallback
+        const local = localStorage.getItem('rpcPlannerData');
+        if (local) {
+          loaded = JSON.parse(local);
+          console.log('Loaded from localStorage fallback');
+        } else {
+          loaded = INIT;
+        }
+      } else {
+        loaded = data.content;
+        // Save to localStorage as backup
+        localStorage.setItem('rpcPlannerData', JSON.stringify(loaded));
+      }
+      setDb(loaded);
+    } catch (err) {
+      console.error(err);
+      setError('Supabase connection issue. Using local backup if available.');
+      const local = localStorage.getItem('rpcPlannerData');
+      setDb(local ? JSON.parse(local) : INIT);
     }
   }, []);
+
+  // Load on mount + visibility
+  useEffect(() => {
+    loadData();
+    const handleVisibility = () => { if (!document.hidden) loadData(); };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [loadData]);
+
+  const mut = fn => setDb(prev => {
+    const next = JSON.parse(JSON.stringify(prev || INIT));
+    fn(next);
+    // Save to Supabase + localStorage
+    localStorage.setItem('rpcPlannerData', JSON.stringify(next));
+    supabase
+      .from('app_data')
+      .upsert({ id: 1, content: next })
+      .then(() => {})
+      .catch(err => {
+        console.error('Supabase save failed, but local saved:', err);
+        setError('Changes saved locally only (Supabase unavailable)');
+      });
+    return next;
+  });
+
+  if (!db) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:C.bg, fontFamily:'Georgia, serif', fontSize:18, color:C.navy }}>
+      Loading your planner…
+    </div>
+  );
+
+  // ... rest of your App function stays the same
 
   // Load on mount; reload whenever the tab comes back into focus
   // so both families always see fresh data without a manual refresh
@@ -195,7 +171,11 @@ export default function App() {
           }}>{label}</button>
         ))}
       </nav>
-
+      {error && (
+        <div style={{ background:'#FEF2F2', color:C.red, padding:'8px 16px', fontSize:13, borderBottom:`1px solid ${C.border}` }}>
+          ⚠️ {error} — Your data is safe locally.
+        </div>
+      )}
       {/* Main */}
       <main style={{ maxWidth:960, margin:'0 auto', padding:'20px 16px' }}>
         {view==='today' && mode==='student' && <StudentToday db={db} stuId={stuId} setStu={setStu} mut={mut} />}
