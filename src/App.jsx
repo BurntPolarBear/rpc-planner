@@ -26,6 +26,12 @@ const weekDays = (mon) =>
     return toDate(d);
   });
 
+const addDays = (ds, n) => {
+  const d = new Date(ds + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return toDate(d);
+};
+
 const shortDate = (ds) =>
   new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
@@ -1087,6 +1093,7 @@ function WeekOverview({ db, weekMon, setWk, onGoToPlan }) {
 function Planner({ db, mut, weekMon, setWk, activeGG, setActiveGG }) {
   const [showQS, setQS]     = useState(false);
   const [showBulk, setBulk] = useState(false);
+  const [showBreak, setBreak] = useState(false);
   const [selected, setSel]  = useState(null); // { date, subjectId }
   const gg      = db.gradeGroups.find(g => g.id===activeGG);
   const planKey = `${activeGG}:${weekMon}`;
@@ -1162,8 +1169,9 @@ function Planner({ db, mut, weekMon, setWk, activeGG, setActiveGG }) {
         <Btn onClick={()=>setWk(getMon(TODAY))} style={{ background:'white', border:`1px solid ${C.border}`, color:C.muted, fontSize:12 }}>This week</Btn>
         <div style={{ marginLeft:'auto', display:'flex', gap:8, flexWrap:'wrap' }}>
           <Btn onClick={copyLastWeek} style={{ background:'white', border:`1px solid ${C.border}`, color:'#333' }}>📋 Copy Last Week</Btn>
-          <Btn onClick={()=>{ setQS(true); setBulk(false); setSel(null); }} style={{ background:C.gold, color:'white' }}>⚡ Quick Schedule</Btn>
-          <Btn onClick={()=>{ setBulk(true); setQS(false); setSel(null); }} style={{ background:C.navy, color:'white' }}>📚 Plan Course</Btn>
+          <Btn onClick={()=>{ setQS(true); setBulk(false); setBreak(false); setSel(null); }} style={{ background:C.gold, color:'white' }}>⚡ Quick Schedule</Btn>
+          <Btn onClick={()=>{ setBulk(true); setQS(false); setBreak(false); setSel(null); }} style={{ background:C.navy, color:'white' }}>📚 Plan Course</Btn>
+          <Btn onClick={()=>{ setBreak(true); setQS(false); setBulk(false); setSel(null); }} style={{ background:'white', border:`1px solid ${C.border}`, color:'#333' }}>🏖 Take a Break</Btn>
         </div>
       </div>
 
@@ -1220,6 +1228,7 @@ function Planner({ db, mut, weekMon, setWk, activeGG, setActiveGG }) {
 
       {showQS && <QuickSchedule gg={gg} db={db} planKey={planKey} days={days} mut={mut} onClose={()=>setQS(false)} />}
       {showBulk && <BulkPlanPanel gg={gg} db={db} activeGG={activeGG} startMon={weekMon} mut={mut} onClose={()=>setBulk(false)} onJump={setWk} />}
+      {showBreak && <BreakPanel gg={gg} db={db} activeGG={activeGG} startMon={weekMon} mut={mut} onClose={()=>setBreak(false)} onJump={setWk} />}
     </div>
   );
 }
@@ -1762,6 +1771,120 @@ function BulkPlanPanel({ gg, db, activeGG, startMon, mut, onClose, onJump }) {
           <div style={{ display:'flex', gap:10, borderTop:`1px solid ${C.border}`, paddingTop:14 }}>
             <Btn onClick={apply} disabled={!anyIncluded || preview.totalLessons===0} style={{ background: anyIncluded && preview.totalLessons>0 ? C.navy : '#9CA3AF', color:'white', flex:1, padding:'10px 0', fontSize:14 }}>
               Schedule {preview.totalLessons} Lesson{preview.totalLessons!==1?'s':''}
+            </Btn>
+            <Btn onClick={onClose} style={{ background:'#E8EEF4', color:C.muted }}>Cancel</Btn>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── TAKE A BREAK (INSERT VACATION) ───────────────────────────────────────────
+function BreakPanel({ gg, db, activeGG, startMon, mut, onClose, onJump }) {
+  const [breakMon, setBreakMon] = useState(startMon);
+  const [weeks, setWeeks]       = useState(1);
+  const [applyAll, setApplyAll] = useState(true);
+  const [result, setResult]     = useState(null);
+
+  const breakMonday = getMon(breakMon); // normalize to that week's Monday
+
+  // Preview how much will move
+  const preview = useMemo(() => {
+    const prefixes = applyAll ? db.gradeGroups.map(g=>g.id+':') : [activeGG+':'];
+    let weeksAffected = 0, lessonsAffected = 0;
+    prefixes.forEach(prefix => {
+      Object.keys(db.plans).forEach(key => {
+        if (!key.startsWith(prefix)) return;
+        const monday = key.slice(prefix.length);
+        if (monday >= breakMonday) {
+          const wk = db.plans[key];
+          const n = Object.values(wk).reduce((a,ls)=>a+ls.length,0);
+          if (n>0) { weeksAffected++; lessonsAffected += n; }
+        }
+      });
+    });
+    return { weeksAffected, lessonsAffected };
+  }, [db, breakMonday, applyAll, activeGG]);
+
+  const apply = () => {
+    const shiftDays = weeks * 7;
+    const prefixes = applyAll ? db.gradeGroups.map(g=>g.id+':') : [activeGG+':'];
+    let lessonsShifted = 0;
+
+    mut(d => {
+      prefixes.forEach(prefix => {
+        const sources = Object.keys(d.plans).filter(k => k.startsWith(prefix) && k.slice(prefix.length) >= breakMonday);
+        const moved = {};
+        sources.forEach(key => {
+          const monday = key.slice(prefix.length);
+          const newKey = prefix + addDays(monday, shiftDays);
+          const newWeek = {};
+          Object.entries(d.plans[key]).forEach(([date, lessons]) => {
+            newWeek[addDays(date, shiftDays)] = lessons;
+            lessonsShifted += lessons.length;
+          });
+          moved[newKey] = newWeek;
+        });
+        sources.forEach(key => delete d.plans[key]);
+        Object.entries(moved).forEach(([k, wk]) => { d.plans[k] = wk; });
+      });
+    });
+
+    setResult({ lessonsShifted, resumeWeek: addDays(breakMonday, shiftDays) });
+  };
+
+  return (
+    <div style={{ background:'#F0F4F8', border:`1px solid ${C.border}`, borderRadius:12, padding:20, marginBottom:14 }}>
+      <div style={{ fontFamily:'Georgia,serif', fontSize:18, fontWeight:'bold', color:C.navy, marginBottom:3 }}>🏖 Take a Break</div>
+      <div style={{ fontSize:13, color:C.muted, marginBottom:18 }}>
+        Going on vacation? Instead of deleting lessons (which leaves a gap in the sequence), insert a break — every lesson from that week onward slides later, so nothing is lost and the lesson order stays intact.
+      </div>
+
+      {result ? (
+        <div>
+          <div style={{ background:'#F0FDF4', border:'1px solid #86EFAC', borderRadius:10, padding:'14px 16px', marginBottom:14 }}>
+            <div style={{ fontSize:15, fontWeight:700, color:C.green, marginBottom:4 }}>✅ Break added!</div>
+            <div style={{ fontSize:13, color:'#166534' }}>
+              Moved {result.lessonsShifted} lesson{result.lessonsShifted!==1?'s':''} forward. Lessons now resume the week of {shortDate(result.resumeWeek)}.
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:10 }}>
+            <Btn onClick={()=>{ onJump(getMon(result.resumeWeek)); onClose(); }} style={{ background:C.navy, color:'white', flex:1 }}>Jump to resume week →</Btn>
+            <Btn onClick={onClose} style={{ background:'#E8EEF4', color:C.muted }}>Done</Btn>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={{ background:'white', borderRadius:10, padding:14, marginBottom:14, border:`1px solid ${C.border}` }}>
+            <div style={{ display:'flex', gap:16, flexWrap:'wrap', alignItems:'flex-end', marginBottom:14 }}>
+              <div>
+                <label style={lbl}>Break starts the week of</label>
+                <input type="date" value={breakMon} onChange={e=>setBreakMon(e.target.value)} style={{ ...inp }} />
+                <div style={{ fontSize:11, color:C.muted, marginTop:4 }}>Week of {shortDate(breakMonday)}</div>
+              </div>
+              <div>
+                <label style={lbl}>How many weeks off</label>
+                <input type="number" min={1} max={12} value={weeks}
+                  onChange={e=>setWeeks(Math.min(Math.max(parseInt(e.target.value)||1,1),12))}
+                  style={{ ...inp, width:80 }} />
+              </div>
+            </div>
+            <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:14 }}>
+              <input type="checkbox" checked={applyAll} onChange={e=>setApplyAll(e.target.checked)} style={{ accentColor:C.navy, width:16, height:16 }} />
+              Apply to all grade groups <span style={{ color:C.muted, fontSize:12 }}>(a family vacation affects everyone)</span>
+            </label>
+          </div>
+
+          <div style={{ background:'#FFF7ED', border:'1px solid #FED7AA', borderRadius:8, padding:'10px 14px', marginBottom:14, fontSize:13, color:'#9A3412' }}>
+            {preview.lessonsAffected > 0
+              ? <>This will move <strong>{preview.lessonsAffected} lesson{preview.lessonsAffected!==1?'s':''}</strong> across {preview.weeksAffected} week{preview.weeksAffected!==1?'s':''} forward by {weeks} week{weeks!==1?'s':''}. Already-recorded student work stays on its original date.</>
+              : <>No planned lessons on or after that week{applyAll?'':' in this grade group'} — nothing to move yet.</>}
+          </div>
+
+          <div style={{ display:'flex', gap:10, borderTop:`1px solid ${C.border}`, paddingTop:14 }}>
+            <Btn onClick={apply} disabled={preview.lessonsAffected===0} style={{ background: preview.lessonsAffected>0 ? C.navy : '#9CA3AF', color:'white', flex:1, padding:'10px 0', fontSize:14 }}>
+              Insert {weeks}-Week Break
             </Btn>
             <Btn onClick={onClose} style={{ background:'#E8EEF4', color:C.muted }}>Cancel</Btn>
           </div>
