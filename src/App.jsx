@@ -1055,6 +1055,7 @@ function WeekOverview({ db, weekMon, setWk, onGoToPlan }) {
 // ─── PLANNER ─────────────────────────────────────────────────────────────────
 function Planner({ db, mut, weekMon, setWk, activeGG, setActiveGG }) {
   const [showQS, setQS]     = useState(false);
+  const [showBulk, setBulk] = useState(false);
   const [selected, setSel]  = useState(null); // { date, subjectId }
   const gg      = db.gradeGroups.find(g => g.id===activeGG);
   const planKey = `${activeGG}:${weekMon}`;
@@ -1128,9 +1129,10 @@ function Planner({ db, mut, weekMon, setWk, activeGG, setActiveGG }) {
         <span style={{ fontWeight:700, color:C.navy, fontSize:14 }}>{weekLabel(weekMon)}</span>
         <Btn onClick={()=>shiftWk(1)} style={{ background:'white', border:`1px solid ${C.border}`, color:'#333', padding:'7px 12px' }}>→</Btn>
         <Btn onClick={()=>setWk(getMon(TODAY))} style={{ background:'white', border:`1px solid ${C.border}`, color:C.muted, fontSize:12 }}>This week</Btn>
-        <div style={{ marginLeft:'auto', display:'flex', gap:8 }}>
+        <div style={{ marginLeft:'auto', display:'flex', gap:8, flexWrap:'wrap' }}>
           <Btn onClick={copyLastWeek} style={{ background:'white', border:`1px solid ${C.border}`, color:'#333' }}>📋 Copy Last Week</Btn>
-          <Btn onClick={()=>{ setQS(true); setSel(null); }} style={{ background:C.gold, color:'white' }}>⚡ Quick Schedule</Btn>
+          <Btn onClick={()=>{ setQS(true); setBulk(false); setSel(null); }} style={{ background:C.gold, color:'white' }}>⚡ Quick Schedule</Btn>
+          <Btn onClick={()=>{ setBulk(true); setQS(false); setSel(null); }} style={{ background:C.navy, color:'white' }}>📚 Plan Course</Btn>
         </div>
       </div>
 
@@ -1186,6 +1188,7 @@ function Planner({ db, mut, weekMon, setWk, activeGG, setActiveGG }) {
       )}
 
       {showQS && <QuickSchedule gg={gg} db={db} planKey={planKey} days={days} mut={mut} onClose={()=>setQS(false)} />}
+      {showBulk && <BulkPlanPanel gg={gg} db={db} activeGG={activeGG} startMon={weekMon} mut={mut} onClose={()=>setBulk(false)} onJump={setWk} />}
     </div>
   );
 }
@@ -1526,6 +1529,213 @@ function QuickSchedule({ gg, db, planKey, days, mut, onClose }) {
         <Btn onClick={apply} style={{ background:C.navy, color:'white', flex:1, padding:'10px 0', fontSize:14 }}>Schedule Week</Btn>
         <Btn onClick={onClose} style={{ background:'#E8EEF4', color:C.muted }}>Cancel</Btn>
       </div>
+    </div>
+  );
+}
+
+// ─── BULK COURSE PLANNER ──────────────────────────────────────────────────────
+function BulkPlanPanel({ gg, db, activeGG, startMon, mut, onClose, onJump }) {
+  const DAY_LABELS = ['M','T','W','Th','F','Sa','Su']; // Monday-first, matches weekDays()
+
+  const [startDate, setStartDate] = useState(startMon);
+  const [mode, setMode]           = useState('weeks'); // 'weeks' | 'course'
+  const [numWeeks, setNumWeeks]   = useState(12);
+  const [result, setResult]       = useState(null); // { created, skipped, lastMon }
+
+  const [cfg, setCfg] = useState(() => {
+    const c = {};
+    (gg?.subjects||[]).forEach(sub => {
+      let max = 0;
+      Object.values(db.plans).forEach(wk=>Object.values(wk).forEach(ls=>ls.forEach(l=>{ if(l.subjectId===sub.id&&l.lessonNum>max) max=l.lessonNum; })));
+      c[sub.id] = { include:true, startLesson:max>0?max+1:(sub.startLesson||1), dayIdx:[0,1,2,3,4] };
+    });
+    return c;
+  });
+
+  const toggleDay = (sid, i) => setCfg(c => {
+    const n = JSON.parse(JSON.stringify(c));
+    const arr = n[sid].dayIdx;
+    n[sid].dayIdx = arr.includes(i) ? arr.filter(x=>x!==i) : [...arr,i].sort((a,b)=>a-b);
+    return n;
+  });
+
+  const setField = (sid, field, val) => setCfg(c => ({ ...c, [sid]: { ...c[sid], [field]: val } }));
+
+  // Live preview of how many lessons each included subject will generate
+  const preview = useMemo(() => {
+    const startMonday = getMon(startDate);
+    const weeksCap = mode === 'weeks' ? Math.min(Math.max(numWeeks,1), 52) : 52;
+    let totalLessons = 0;
+    const perSubject = {};
+
+    (gg?.subjects||[]).forEach(sub => {
+      const c = cfg[sub.id];
+      if (!c?.include || c.dayIdx.length===0) { perSubject[sub.id]=0; return; }
+      const total = sub.totalLessons ?? 180;
+      let lessonNum = c.startLesson;
+      let count = 0;
+      for (let w=0; w<weeksCap; w++) {
+        const mon = new Date(startMonday+'T12:00:00'); mon.setDate(mon.getDate()+w*7);
+        const wkDays = weekDays(toDate(mon));
+        for (const i of c.dayIdx) {
+          const date = wkDays[i];
+          if (date < startDate) continue;
+          if (mode==='course' && lessonNum > total) break;
+          count++; lessonNum++;
+        }
+        if (mode==='course' && lessonNum > total) break;
+      }
+      perSubject[sub.id] = count;
+      totalLessons += count;
+    });
+    return { totalLessons, perSubject };
+  }, [cfg, startDate, mode, numWeeks, gg]);
+
+  const apply = () => {
+    const startMonday = getMon(startDate);
+    const weeksCap = mode === 'weeks' ? Math.min(Math.max(numWeeks,1), 52) : 52;
+    let created = 0, skipped = 0, lastMon = startMonday;
+
+    mut(d => {
+      const counters = {};
+      (gg?.subjects||[]).forEach(sub => { if (cfg[sub.id]?.include) counters[sub.id] = cfg[sub.id].startLesson; });
+
+      for (let w=0; w<weeksCap; w++) {
+        const monDate = new Date(startMonday+'T12:00:00'); monDate.setDate(monDate.getDate()+w*7);
+        const mon = toDate(monDate);
+        const wkKey = `${activeGG}:${mon}`;
+        const wkDays = weekDays(mon);
+        let anyRemaining = false;
+
+        (gg?.subjects||[]).forEach(sub => {
+          const c = cfg[sub.id];
+          if (!c?.include || c.dayIdx.length===0) return;
+          const total = sub.totalLessons ?? 180;
+          c.dayIdx.forEach(i => {
+            const date = wkDays[i];
+            if (date < startDate) return;
+            if (mode==='course' && counters[sub.id] > total) return;
+            if (!d.plans[wkKey]) d.plans[wkKey] = {};
+            if (!d.plans[wkKey][date]) d.plans[wkKey][date] = [];
+            const exists = d.plans[wkKey][date].find(l => l.subjectId===sub.id);
+            if (exists) { skipped++; return; }
+            d.plans[wkKey][date].push({ subjectId:sub.id, lessonNum:counters[sub.id], questions:[], tasks:[] });
+            counters[sub.id]++; created++;
+            lastMon = mon;
+          });
+          if (mode==='course' && counters[sub.id] <= total) anyRemaining = true;
+        });
+
+        if (mode==='course' && !anyRemaining && w>0) break;
+      }
+    });
+
+    setResult({ created, skipped, lastMon });
+  };
+
+  const anyIncluded = (gg?.subjects||[]).some(s => cfg[s.id]?.include && cfg[s.id]?.dayIdx.length>0);
+
+  return (
+    <div style={{ background:'#F0F4F8', border:`1px solid ${C.border}`, borderRadius:12, padding:20, marginBottom:14 }}>
+      <div style={{ fontFamily:'Georgia,serif', fontSize:18, fontWeight:'bold', color:C.navy, marginBottom:3 }}>📚 Plan a Whole Course</div>
+      <div style={{ fontSize:13, color:C.muted, marginBottom:18 }}>
+        {gg?.name} — Lay out lessons across many weeks at once. Numbers auto-increment across the span. Days that already have a lesson for a subject are skipped, so this is safe to run over existing plans.
+      </div>
+
+      {result ? (
+        <div>
+          <div style={{ background:'#F0FDF4', border:'1px solid #86EFAC', borderRadius:10, padding:'14px 16px', marginBottom:14 }}>
+            <div style={{ fontSize:15, fontWeight:700, color:C.green, marginBottom:4 }}>✅ Scheduled {result.created} lesson{result.created!==1?'s':''}!</div>
+            <div style={{ fontSize:13, color:'#166534' }}>
+              {result.skipped>0 && `${result.skipped} day(s) already had a lesson and were left untouched. `}
+              The plan now runs through the week of {shortDate(result.lastMon)}.
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:10 }}>
+            <Btn onClick={()=>{ onJump(result.lastMon); onClose(); }} style={{ background:C.navy, color:'white', flex:1 }}>Jump to last week →</Btn>
+            <Btn onClick={onClose} style={{ background:'#E8EEF4', color:C.muted }}>Done</Btn>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Span controls */}
+          <div style={{ background:'white', borderRadius:10, padding:14, marginBottom:16, border:`1px solid ${C.border}` }}>
+            <div style={{ display:'flex', gap:16, flexWrap:'wrap', alignItems:'flex-end', marginBottom:14 }}>
+              <div>
+                <label style={lbl}>Start date</label>
+                <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={{ ...inp }} />
+              </div>
+            </div>
+            <label style={lbl}>How far to schedule</label>
+            <div style={{ display:'flex', gap:16, flexWrap:'wrap', alignItems:'center' }}>
+              <label style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer', fontSize:14 }}>
+                <input type="radio" checked={mode==='weeks'} onChange={()=>setMode('weeks')} style={{ accentColor:C.navy, width:16, height:16 }} />
+                Next
+                <input type="number" min={1} max={52} value={numWeeks} disabled={mode!=='weeks'}
+                  onChange={e=>setNumWeeks(Math.min(Math.max(parseInt(e.target.value)||1,1),52))}
+                  style={{ ...inp, width:64, opacity: mode==='weeks'?1:0.5 }} />
+                weeks
+              </label>
+              <label style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer', fontSize:14 }}>
+                <input type="radio" checked={mode==='course'} onChange={()=>setMode('course')} style={{ accentColor:C.navy, width:16, height:16 }} />
+                Through end of course <span style={{ color:C.muted, fontSize:12 }}>(uses each subject's Total)</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Per-subject config */}
+          {(gg?.subjects||[]).map(sub => {
+            const c = cfg[sub.id];
+            const cnt = preview.perSubject[sub.id] || 0;
+            return (
+              <div key={sub.id} style={{ borderLeft:`3px solid ${sub.color}`, paddingLeft:12, marginBottom:16 }}>
+                <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', marginBottom:c.include?10:0 }}>
+                  <input type="checkbox" checked={c.include} onChange={e=>setField(sub.id,'include',e.target.checked)} style={{ accentColor:sub.color, width:16, height:16 }} />
+                  <span style={{ fontWeight:700, fontSize:14 }}>{sub.icon} {sub.name}</span>
+                  {c.include && <span style={{ fontSize:12, color:C.muted, marginLeft:'auto' }}>{cnt} lesson{cnt!==1?'s':''} · through L{(c.startLesson+cnt-1)>0?c.startLesson+cnt-1:c.startLesson}</span>}
+                </label>
+                {c.include && (
+                  <div style={{ display:'flex', gap:16, alignItems:'flex-end', flexWrap:'wrap' }}>
+                    <div>
+                      <label style={lbl}>Start at lesson</label>
+                      <input type="number" value={c.startLesson} onChange={e=>setField(sub.id,'startLesson',parseInt(e.target.value)||1)} style={{ ...inp, width:80 }} />
+                    </div>
+                    <div>
+                      <label style={lbl}>Total in course</label>
+                      <input type="number" value={sub.totalLessons ?? 180} disabled style={{ ...inp, width:80, opacity:0.6 }} />
+                    </div>
+                    <div>
+                      <label style={lbl}>Days per week</label>
+                      <div style={{ display:'flex', gap:4 }}>
+                        {DAY_LABELS.map((dl,i)=>(
+                          <button key={i} onClick={()=>toggleDay(sub.id,i)} style={{
+                            width:28, height:28, borderRadius:6, border:'none', cursor:'pointer', fontSize:11, fontWeight:700,
+                            background:c.dayIdx.includes(i)?sub.color: i>=5 ? '#F0EDE8' : '#D1D9E0',
+                            color:c.dayIdx.includes(i)?'white': i>=5 ? '#B0A89A' : C.muted,
+                          }}>{dl}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Summary + actions */}
+          <div style={{ background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:8, padding:'10px 14px', marginBottom:14, fontSize:13, color:'#1E40AF' }}>
+            This will create <strong>{preview.totalLessons}</strong> lesson{preview.totalLessons!==1?'s':''} across your selected subjects.
+            {mode==='course' && ' Scheduling continues until each subject reaches its course total.'}
+          </div>
+
+          <div style={{ display:'flex', gap:10, borderTop:`1px solid ${C.border}`, paddingTop:14 }}>
+            <Btn onClick={apply} disabled={!anyIncluded || preview.totalLessons===0} style={{ background: anyIncluded && preview.totalLessons>0 ? C.navy : '#9CA3AF', color:'white', flex:1, padding:'10px 0', fontSize:14 }}>
+              Schedule {preview.totalLessons} Lesson{preview.totalLessons!==1?'s':''}
+            </Btn>
+            <Btn onClick={onClose} style={{ background:'#E8EEF4', color:C.muted }}>Cancel</Btn>
+          </div>
+        </>
+      )}
     </div>
   );
 }
