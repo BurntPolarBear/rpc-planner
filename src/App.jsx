@@ -112,9 +112,15 @@ const C = {
   surf:   '#FFFFFF',
 };
 
-const card  = { background: C.surf, borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', padding: 16 };
-const Btn   = ({ style, ...p }) => <button style={{ border:'none', borderRadius:8, padding:'8px 16px', cursor:'pointer', fontSize:13, fontWeight:600, lineHeight:1.5, ...style }} {...p} />;
-const inp   = { border:`1.5px solid ${C.border}`, borderRadius:8, padding:'8px 12px', fontSize:14, fontFamily:'inherit', background:'white', boxSizing:'border-box' };
+const card  = {
+  background: C.surf,
+  borderRadius: 14,
+  border: '1px solid rgba(26,46,74,0.06)',
+  boxShadow: '0 1px 2px rgba(15,30,48,0.05), 0 4px 14px rgba(15,30,48,0.05)',
+  padding: 16,
+};
+const Btn   = ({ style, ...p }) => <button style={{ border:'none', borderRadius:8, padding:'8px 16px', cursor:'pointer', fontSize:13, fontWeight:600, lineHeight:1.5, transition:'transform .12s ease, box-shadow .12s ease, background .12s ease, opacity .12s ease', ...style }} {...p} />;
+const inp   = { border:`1.5px solid ${C.border}`, borderRadius:8, padding:'8px 12px', fontSize:14, fontFamily:'inherit', background:'white', boxSizing:'border-box', transition:'border-color .12s ease, box-shadow .12s ease' };
 const lbl   = { display:'block', fontSize:10, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', color:C.muted, marginBottom:4 };
 
 // ─── ROOT ────────────────────────────────────────────────────────────────────
@@ -209,6 +215,24 @@ export default function App() {
       {/* Global responsive rules */}
       <style>{`
         * { box-sizing: border-box; }
+        body {
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+          text-rendering: optimizeLegibility;
+        }
+        /* Gold focus ring — visible keyboard focus + a polished touch */
+        input:focus, textarea:focus, select:focus {
+          outline: none;
+          border-color: ${C.gold} !important;
+          box-shadow: 0 0 0 3px rgba(212,146,10,0.15);
+        }
+        button:focus-visible {
+          outline: 2px solid ${C.gold};
+          outline-offset: 2px;
+        }
+        /* Subtle tactility on buttons */
+        button:not(:disabled):hover { filter: brightness(1.03); }
+        button:not(:disabled):active { transform: translateY(1px); }
         @media (max-width: 560px) {
           .lesson-editor-grid { grid-template-columns: 1fr !important; }
           .app-main { padding: 14px 12px !important; }
@@ -217,9 +241,16 @@ export default function App() {
         @media (max-width: 400px) {
           .app-main { padding: 12px 9px !important; }
         }
+        /* Respect users who prefer less motion */
+        @media (prefers-reduced-motion: reduce) {
+          *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            transition-duration: 0.01ms !important;
+          }
+        }
       `}</style>
       {/* Header */}
-      <header style={{ background:C.navy, height:56, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 20px' }}>
+      <header style={{ background:C.navy, height:56, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 20px', borderBottom:`2px solid ${C.gold}`, boxShadow:'0 2px 10px rgba(15,30,48,0.12)', position:'relative', zIndex:2 }}>
         <span className="app-header-title" style={{ fontFamily:'Georgia,serif', fontSize:18, color:'white', fontWeight:'bold', letterSpacing:'-0.3px' }}>
           📋 RPC Planner
         </span>
@@ -568,8 +599,8 @@ function StudentPicker({ db, setStu }) {
             <button key={s.id} onClick={() => setStu(s.id)} style={{
               ...card, border:'2px solid transparent', cursor:'pointer', textAlign:'left', padding:20, transition:'all .15s'
             }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor=C.gold; e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.12)'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor='transparent'; e.currentTarget.style.boxShadow='0 1px 4px rgba(0,0,0,0.08)'; }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor=C.gold; e.currentTarget.style.boxShadow='0 2px 6px rgba(15,30,48,0.08), 0 10px 28px rgba(15,30,48,0.10)'; e.currentTarget.style.transform='translateY(-2px)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(26,46,74,0.06)'; e.currentTarget.style.boxShadow='0 1px 2px rgba(15,30,48,0.05), 0 4px 14px rgba(15,30,48,0.05)'; e.currentTarget.style.transform='translateY(0)'; }}
             >
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
                 <div style={{ fontSize:36, marginBottom:10 }}>{s.emoji}</div>
