@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { PinModal } from './components/PinModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { StudentToday } from './components/StudentView';
 import { INIT } from './utils/constants';
 import { TODAY, getMon } from './utils/dates';
@@ -199,19 +200,23 @@ export default function App() {
 
       {/* Main */}
       <main className="app-main" style={{ maxWidth:960, margin:'0 auto', padding:'20px 16px' }}>
-        <Suspense fallback={<TabFallback />}>
-          {view==='today' && mode==='student' && <StudentToday db={db} stuId={stuId} setStu={setStu} mut={mut} />}
-          {view==='today' && mode==='parent'  && <Overview db={db} />}
-          {view==='week'  && mode==='parent'  && <WeekOverview db={db} weekMon={weekMon} setWk={setWk} onGoToPlan={goToPlan} />}
-          {view==='plan'  && mode==='parent'  && <Planner db={db} mut={mut} weekMon={weekMon} setWk={setWk} activeGG={planGG} setActiveGG={setPGG} />}
-          {view==='review'&& mode==='parent'  && <Review db={db} mut={mut} />}
-          {view==='writing'&& mode==='parent'  && <WritingView db={db} mut={mut} />}
-          {view==='grades'&& mode==='parent'  && <GradesView db={db} mut={mut} />}
-          {view==='progress'&& mode==='parent'  && <ProgressView db={db} />}
-          {view==='records'&& mode==='parent'  && <RecordsView db={db} />}
-          {view==='export'&& mode==='parent'  && <ExportView db={db} weekMon={weekMon} setWk={setWk} />}
-          {view==='setup' && <Setup db={db} mut={mut} />}
-        </Suspense>
+        {/* key={view}: gives each tab its own boundary, so a section that throws
+            can be escaped just by switching tabs — the new view remounts clean. */}
+        <ErrorBoundary key={view}>
+          <Suspense fallback={<TabFallback />}>
+            {view==='today' && mode==='student' && <StudentToday db={db} stuId={stuId} setStu={setStu} mut={mut} />}
+            {view==='today' && mode==='parent'  && <Overview db={db} />}
+            {view==='week'  && mode==='parent'  && <WeekOverview db={db} weekMon={weekMon} setWk={setWk} onGoToPlan={goToPlan} />}
+            {view==='plan'  && mode==='parent'  && <Planner db={db} mut={mut} weekMon={weekMon} setWk={setWk} activeGG={planGG} setActiveGG={setPGG} />}
+            {view==='review'&& mode==='parent'  && <Review db={db} mut={mut} />}
+            {view==='writing'&& mode==='parent'  && <WritingView db={db} mut={mut} />}
+            {view==='grades'&& mode==='parent'  && <GradesView db={db} mut={mut} />}
+            {view==='progress'&& mode==='parent'  && <ProgressView db={db} />}
+            {view==='records'&& mode==='parent'  && <RecordsView db={db} />}
+            {view==='export'&& mode==='parent'  && <ExportView db={db} weekMon={weekMon} setWk={setWk} />}
+            {view==='setup' && <Setup db={db} mut={mut} />}
+          </Suspense>
+        </ErrorBoundary>
       </main>
     </div>
   );
