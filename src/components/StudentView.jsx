@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ReportCard } from './Grades';
+import { ReportCard } from './ReportCard';
 import { TODAY, calcStreak, getMon, shortDate, toDate, uid } from '../utils/dates';
 import { Btn, C, card, inp, lbl } from '../utils/theme';
 

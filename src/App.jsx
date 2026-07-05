@@ -1,20 +1,34 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { ExportView } from './components/Export';
-import { GradesView } from './components/Grades';
-import { Overview, WeekOverview } from './components/Overview';
 import { PinModal } from './components/PinModal';
-import { Planner } from './components/Planner';
-import { ProgressView } from './components/Progress';
-import { RecordsView } from './components/Records';
-import { Review } from './components/Review';
-import { Setup } from './components/Setup';
 import { StudentToday } from './components/StudentView';
-import { WritingView } from './components/Writing';
 import { INIT } from './utils/constants';
 import { TODAY, getMon } from './utils/dates';
 import { Btn, C } from './utils/theme';
 
+// Parent-only tabs are code-split so students never download them and each tab's
+// JS loads on first visit instead of up front. React.lazy expects a default
+// export, so each named export is remapped to `default`. The two Overview
+// wrappers point at the same module — Rollup emits one shared chunk for both.
+const Overview     = lazy(() => import('./components/Overview').then(m => ({ default: m.Overview })));
+const WeekOverview = lazy(() => import('./components/Overview').then(m => ({ default: m.WeekOverview })));
+const Planner      = lazy(() => import('./components/Planner').then(m => ({ default: m.Planner })));
+const Review       = lazy(() => import('./components/Review').then(m => ({ default: m.Review })));
+const WritingView  = lazy(() => import('./components/Writing').then(m => ({ default: m.WritingView })));
+const GradesView   = lazy(() => import('./components/Grades').then(m => ({ default: m.GradesView })));
+const ProgressView = lazy(() => import('./components/Progress').then(m => ({ default: m.ProgressView })));
+const RecordsView  = lazy(() => import('./components/Records').then(m => ({ default: m.RecordsView })));
+const ExportView   = lazy(() => import('./components/Export').then(m => ({ default: m.ExportView })));
+const Setup        = lazy(() => import('./components/Setup').then(m => ({ default: m.Setup })));
+
+// Shown briefly while a code-split tab's chunk downloads.
+function TabFallback() {
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:'52px 0', color:C.muted, fontFamily:'Georgia, serif', fontSize:15 }}>
+      Loading…
+    </div>
+  );
+}
 
 // Single Supabase client for the whole app. Defined here (not a separate module)
 // so bundlers keep the realtime client used for cross-browser live sync.
@@ -185,17 +199,19 @@ export default function App() {
 
       {/* Main */}
       <main className="app-main" style={{ maxWidth:960, margin:'0 auto', padding:'20px 16px' }}>
-        {view==='today' && mode==='student' && <StudentToday db={db} stuId={stuId} setStu={setStu} mut={mut} />}
-        {view==='today' && mode==='parent'  && <Overview db={db} />}
-        {view==='week'  && mode==='parent'  && <WeekOverview db={db} weekMon={weekMon} setWk={setWk} onGoToPlan={goToPlan} />}
-        {view==='plan'  && mode==='parent'  && <Planner db={db} mut={mut} weekMon={weekMon} setWk={setWk} activeGG={planGG} setActiveGG={setPGG} />}
-        {view==='review'&& mode==='parent'  && <Review db={db} mut={mut} />}
-        {view==='writing'&& mode==='parent'  && <WritingView db={db} mut={mut} />}
-        {view==='grades'&& mode==='parent'  && <GradesView db={db} mut={mut} />}
-        {view==='progress'&& mode==='parent'  && <ProgressView db={db} />}
-        {view==='records'&& mode==='parent'  && <RecordsView db={db} />}
-        {view==='export'&& mode==='parent'  && <ExportView db={db} weekMon={weekMon} setWk={setWk} />}
-        {view==='setup' && <Setup db={db} mut={mut} />}
+        <Suspense fallback={<TabFallback />}>
+          {view==='today' && mode==='student' && <StudentToday db={db} stuId={stuId} setStu={setStu} mut={mut} />}
+          {view==='today' && mode==='parent'  && <Overview db={db} />}
+          {view==='week'  && mode==='parent'  && <WeekOverview db={db} weekMon={weekMon} setWk={setWk} onGoToPlan={goToPlan} />}
+          {view==='plan'  && mode==='parent'  && <Planner db={db} mut={mut} weekMon={weekMon} setWk={setWk} activeGG={planGG} setActiveGG={setPGG} />}
+          {view==='review'&& mode==='parent'  && <Review db={db} mut={mut} />}
+          {view==='writing'&& mode==='parent'  && <WritingView db={db} mut={mut} />}
+          {view==='grades'&& mode==='parent'  && <GradesView db={db} mut={mut} />}
+          {view==='progress'&& mode==='parent'  && <ProgressView db={db} />}
+          {view==='records'&& mode==='parent'  && <RecordsView db={db} />}
+          {view==='export'&& mode==='parent'  && <ExportView db={db} weekMon={weekMon} setWk={setWk} />}
+          {view==='setup' && <Setup db={db} mut={mut} />}
+        </Suspense>
       </main>
     </div>
   );
