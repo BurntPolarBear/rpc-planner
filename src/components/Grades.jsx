@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { KIND_OPTIONS } from '../utils/constants';
+import { RUBRIC_PRESETS, getPreset } from '../utils/rubricPresets';
 import { TODAY, shortDate, uid } from '../utils/dates';
 import { BENCH, CURRENT_SY, gradeColor, pctToLetter, schoolYearOf } from '../utils/grades';
 import { textStats } from '../utils/text';
@@ -72,6 +73,7 @@ function GradeComposer({ db, mut, student, gg, onDone, prefill, onPrefillConsume
       ? prefill.subjectId
       : (subjects[0]?.id || ''));
   const [rigor, setRigor] = useState('standard');
+  const [presetId, setPresetId] = useState('general'); // assignment type → shapes the rubric
   const [src, setSrc]     = useState('paste'); // paste | blog | upload
   const [title, setTitle] = useState(() => prefill?.title || '');
   const [text, setText]   = useState(() => prefill?.text || '');
@@ -87,6 +89,7 @@ function GradeComposer({ db, mut, student, gg, onDone, prefill, onPrefillConsume
   const [fromReview, setFromReview] = useState(() => !!prefill); // for the "loaded from Review" note
 
   const subject = subjects.find(s => s.id === subjectId);
+  const preset  = getPreset(presetId);
   const stats = textStats(text);
 
   // Prefill is consumed once, on mount: clear it upstream so a later plain visit
@@ -130,6 +133,7 @@ function GradeComposer({ db, mut, student, gg, onDone, prefill, onPrefillConsume
     setLoading(true); setError(null); setProposal(null);
     try {
       const payload = { subject: subject?.name || 'General', gradeLevel: gg?.name || '', rigor, title };
+      if (preset.assignmentType) { payload.assignmentType = preset.assignmentType; payload.rubricGuidance = preset.guidance; }
       if (src === 'upload') payload.images = images.map(im => ({ media_type: im.media_type, data: im.data }));
       else payload.text = text;
       const res = await fetch('/api/grade-work', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(payload) });
@@ -142,7 +146,7 @@ function GradeComposer({ db, mut, student, gg, onDone, prefill, onPrefillConsume
       setProposal({
         subjectId,
         title: title || (g.transcription ? 'Handwritten work' : 'Untitled'),
-        kind: 'Assignment', weight: 1, score,
+        kind: preset.kind || 'Assignment', weight: 1, score,
         benchmark: BENCH[g.benchmark] ? g.benchmark : null,
         benchmarkNote: g.benchmarkNote || '',
         rubric, strengths: g.strengths || [], improvements: g.improvements || [],
@@ -206,6 +210,23 @@ function GradeComposer({ db, mut, student, gg, onDone, prefill, onPrefillConsume
             </div>
           </div>
         </div>
+        {/* Assignment type presets — shape the rubric the AI builds */}
+        <div style={{ marginBottom:14 }}>
+          <label style={lbl}>Assignment type <span style={{ fontWeight:600, color:C.muted, textTransform:'none', letterSpacing:0 }}>· shapes the rubric</span></label>
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+            {RUBRIC_PRESETS.map(pr => {
+              const on = pr.id === presetId;
+              return (
+                <button key={pr.id} onClick={()=>{ setPresetId(pr.id); setProposal(null); }} style={{
+                  border:`1px solid ${on?C.navy:C.border}`, background:on?C.navy:'white', color:on?'white':'#333',
+                  fontWeight:on?700:500, fontSize:12.5, padding:'7px 11px', borderRadius:8, cursor:'pointer',
+                }}>{pr.icon} {pr.label}</button>
+              );
+            })}
+          </div>
+          {preset.blurb && <div style={{ fontSize:11.5, color:C.muted, marginTop:8, lineHeight:1.5 }}>{preset.blurb}</div>}
+        </div>
+
         <div style={{ fontSize:11.5, color:C.muted, marginBottom:14, lineHeight:1.5, background:'#F8FAFC', border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 10px' }}>
           {rigor==='rigorous'
             ? '⚑ Rigorous: measured against the strongest students in the country for this grade — honest about gaps vs. elite performance.'
@@ -267,7 +288,7 @@ function GradeComposer({ db, mut, student, gg, onDone, prefill, onPrefillConsume
 
         {/* Title + text (paste/blog) */}
         <label style={lbl}>Title</label>
-        <input value={title} onChange={e=>setTitle(e.target.value)} style={{ ...inp, width:'100%', marginBottom:10 }} placeholder="e.g. Essay: My Summer, or Chapter 4 Lab" />
+        <input value={title} onChange={e=>setTitle(e.target.value)} style={{ ...inp, width:'100%', marginBottom:10 }} placeholder={preset.titlePlaceholder || 'e.g. Essay: My Summer, or Chapter 4 Lab'} />
         {src!=='upload' && (
           <>
             <label style={lbl}>The work</label>
