@@ -350,13 +350,75 @@ function StudentsTab({ db, mut }) {
 
 
 function CoursesTab({ db, mut }) {
+  const [confirmDel, setConfirmDel] = useState(null); // grade id pending delete confirmation
+
+  const addGrade = () => mut(d => {
+    if (!d.gradeGroups) d.gradeGroups = [];
+    d.gradeGroups.push({
+      id: uid(),
+      name: 'New Grade',
+      subjects: [
+        { id: uid(), name: 'Mathematics', icon: '➗',  color: '#2563EB', startLesson: 1, totalLessons: 180 },
+        { id: uid(), name: 'English',     icon: '✏️', color: '#7C3AED', startLesson: 1, totalLessons: 180 },
+        { id: uid(), name: 'History',     icon: '🏛️', color: '#B45309', startLesson: 1, totalLessons: 180 },
+        { id: uid(), name: 'Science',     icon: '🔬', color: '#047857', startLesson: 1, totalLessons: 180 },
+      ],
+    });
+  });
+
+  const deleteGrade = id => {
+    mut(d => { d.gradeGroups = (d.gradeGroups||[]).filter(g => g.id !== id); });
+    setConfirmDel(null);
+  };
+
   return (
     <div>
-      <div style={{ fontSize:13, color:C.muted, marginBottom:14 }}>Set the starting lesson # and total lessons for each subject. Total feeds the progress bars on the Progress tab (RPC courses are typically 180).</div>
-      {db.gradeGroups.map(gg => (
+      <div style={{ fontSize:13, color:C.muted, marginBottom:14 }}>
+        Each grade holds its own set of subjects. Set the starting lesson # and total lessons for each subject — the total feeds the progress bars on the Progress tab (RPC courses are typically 180). Use <strong>+ Add Grade</strong> below to add another grade level, then assign students to it under the Students tab.
+      </div>
+      {db.gradeGroups.map(gg => {
+        const assigned = db.students.filter(s => s.gradeGroupId === gg.id);
+        const isLast   = db.gradeGroups.length <= 1;
+        const blocked  = assigned.length > 0 || isLast;
+        return (
         <div key={gg.id} style={{ ...card, marginBottom:20 }}>
-          <input value={gg.name} onChange={e=>mut(d=>{const g=d.gradeGroups.find(x=>x.id===gg.id);if(g)g.name=e.target.value;})}
-            style={{ ...inp, fontWeight:700, fontSize:15, width:'100%', marginBottom:16 }} />
+          {/* Grade header: name, student count, delete */}
+          <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:16, flexWrap:'wrap' }}>
+            <input value={gg.name} onChange={e=>mut(d=>{const g=d.gradeGroups.find(x=>x.id===gg.id);if(g)g.name=e.target.value;})}
+              style={{ ...inp, fontWeight:700, fontSize:15, flex:1, minWidth:160 }} placeholder="Grade name" />
+            <span style={{ fontSize:12, color:C.muted, whiteSpace:'nowrap' }}>
+              {assigned.length} student{assigned.length!==1?'s':''}
+            </span>
+            <Btn onClick={()=>setConfirmDel(confirmDel===gg.id ? null : gg.id)}
+              style={{ background:'white', border:`1px solid ${C.border}`, color:C.muted, padding:'6px 12px', flexShrink:0 }}>🗑 Delete grade</Btn>
+          </div>
+
+          {/* Delete confirmation / guard */}
+          {confirmDel===gg.id && (
+            <div style={{ background: blocked ? '#FFFBEB' : '#FEF2F2', border:`1px solid ${blocked ? '#FDE68A' : '#FCA5A5'}`, borderRadius:8, padding:12, marginBottom:16, fontSize:13 }}>
+              {blocked ? (
+                <>
+                  <div style={{ color:C.yellow, marginBottom:10, lineHeight:1.5 }}>
+                    {assigned.length > 0
+                      ? `${assigned.length} student${assigned.length!==1?'s are':' is'} assigned to this grade. Move them to another grade under the Students tab first, then you can delete it.`
+                      : 'You need at least one grade. Add another grade before deleting this one.'}
+                  </div>
+                  <Btn onClick={()=>setConfirmDel(null)} style={{ background:'white', color:C.muted, border:`1px solid ${C.border}` }}>OK</Btn>
+                </>
+              ) : (
+                <>
+                  <div style={{ color:C.red, fontWeight:700, marginBottom:10, lineHeight:1.5 }}>
+                    Delete “{gg.name}” and its {gg.subjects.length} subject{gg.subjects.length!==1?'s':''}? This can’t be undone.
+                  </div>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <Btn onClick={()=>deleteGrade(gg.id)} style={{ background:C.red, color:'white' }}>Yes, delete grade</Btn>
+                    <Btn onClick={()=>setConfirmDel(null)} style={{ background:'white', color:C.muted, border:`1px solid ${C.border}` }}>Cancel</Btn>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {gg.subjects.map(sub => (
             <div key={sub.id} style={{ display:'flex', gap:8, alignItems:'center', marginBottom:8, flexWrap:'wrap' }}>
               <input value={sub.icon} maxLength={2}
@@ -384,7 +446,9 @@ function CoursesTab({ db, mut }) {
           <Btn onClick={()=>mut(d=>{const g=d.gradeGroups.find(x=>x.id===gg.id);if(g)g.subjects.push({id:uid(),name:'New Subject',icon:'📖',color:'#64748B',startLesson:1,totalLessons:180});})}
             style={{ background:'transparent', border:`1px dashed ${C.border}`, color:C.muted, marginTop:8 }}>+ Add Subject</Btn>
         </div>
-      ))}
+        );
+      })}
+      <Btn onClick={addGrade} style={{ background:C.navy, color:'white', marginTop:4 }}>+ Add Grade</Btn>
     </div>
   );
 }
