@@ -23,6 +23,10 @@ export default async function handler(req, res) {
   const title      = (body?.title || '').trim();
   const text       = (body?.text || '').trim();
   const images     = Array.isArray(body?.images) ? body.images.slice(0, 5) : [];
+  // Optional assignment-type preset (from the Grades composer). Shapes which rubric
+  // categories the AI builds; it never sets the score. Capped as untrusted input.
+  const assignmentType = (body?.assignmentType || '').trim().slice(0, 200);
+  const rubricGuidance = (body?.rubricGuidance || '').trim().slice(0, 900);
 
   const hasImages = images.length > 0;
   if (!hasImages && text.length < 30) {
@@ -33,6 +37,10 @@ export default async function handler(req, res) {
     ? `RIGOR: Measure this against the STRONGEST students in the country for ${gradeLevel || 'this grade'} — the level a top classical or advanced program (or a "Level 4 / Exceeds" state benchmark, or NAEP "Advanced") would expect. Do NOT lower expectations for age alone. Be encouraging but honest about gaps compared to elite performance.`
     : `RIGOR: Measure this against TYPICAL, solid grade-level expectations for ${gradeLevel || 'this grade'} nationally — what a good public or homeschool student at this grade is expected to do by year's end.`;
 
+  const assignmentLine = assignmentType
+    ? `ASSIGNMENT TYPE: This work is ${assignmentType}. ${rubricGuidance} Use rubric categories that fit this assignment type (adapt the generic examples below to match it), still sized so the "max" values sum to exactly 100. Judge the work by what matters for this kind of assignment.`
+    : '';
+
   const transcribeLine = hasImages
     ? `The work is handwritten and provided as photo(s). FIRST, transcribe exactly what the student wrote, preserving their real spelling, punctuation, and paragraphing (do not silently correct errors — conventions are part of the grade). Put that in the "transcription" field. If parts are illegible, write [illegible] rather than guessing. THEN grade the transcribed work.`
     : '';
@@ -42,6 +50,7 @@ export default async function handler(req, res) {
 ${gradeLevel ? `Student's grade level: ${gradeLevel}.` : ''}
 ${rigorLine}
 ${transcribeLine}
+${assignmentLine}
 
 Build a rubric of 4 to 6 categories appropriate to ${subject} and to this grade level (for example, writing-style subjects: Ideas & Content, Organization, Evidence/Support, Language & Style, Conventions; content subjects like History or Science: Understanding of Content, Accuracy, Use of Evidence/Detail, Organization & Clarity, Conventions). Assign each category a "max" number of points; the max values across all categories MUST sum to exactly 100. Award earned "points" for each category with a specific one-sentence comment that cites something concrete from the work. The overall "score" MUST equal the sum of the earned points (0-100).
 
