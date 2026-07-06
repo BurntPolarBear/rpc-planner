@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KIND_OPTIONS } from '../utils/constants';
 import { TODAY, shortDate, uid } from '../utils/dates';
 import { BENCH, CURRENT_SY, gradeColor, pctToLetter, schoolYearOf } from '../utils/grades';
@@ -8,8 +8,12 @@ import { BenchBadge, ReportCard } from './ReportCard';
 
 
 // ─── GRADES (parent) ──────────────────────────────────────────────────────────
-export function GradesView({ db, mut }) {
-  const [stuId, setStuId] = useState(db.students[0]?.id || '');
+export function GradesView({ db, mut, prefill, onPrefillConsumed }) {
+  // When arriving from Review's "Grade this", open straight to that student.
+  const [stuId, setStuId] = useState(() =>
+    (prefill?.studentId && db.students.some(s => s.id === prefill.studentId))
+      ? prefill.studentId
+      : (db.students[0]?.id || ''));
   const [tab, setTab] = useState('grade'); // grade | book | report
   const student = db.students.find(s => s.id === stuId);
   const gg = db.gradeGroups.find(g => g.id === student?.gradeGroupId);
@@ -46,7 +50,9 @@ export function GradesView({ db, mut }) {
         <>
           {/* Kept mounted so an unsaved AI proposal survives a peek at the Gradebook/Report Card */}
           <div style={{ display: tab==='grade' ? 'block' : 'none' }}>
-            <GradeComposer key={student.id} db={db} mut={mut} student={student} gg={gg} onDone={()=>setTab('book')} />
+            <GradeComposer key={student.id} db={db} mut={mut} student={student} gg={gg} onDone={()=>setTab('book')}
+              prefill={prefill && prefill.studentId === student.id ? prefill : null}
+              onPrefillConsumed={onPrefillConsumed} />
           </div>
           {tab==='book'   && <GradebookList key={student.id} db={db} mut={mut} student={student} gg={gg} />}
           {tab==='report' && <ReportCard key={student.id} student={student} db={db} />}
@@ -57,13 +63,18 @@ export function GradesView({ db, mut }) {
 }
 
 
-function GradeComposer({ db, mut, student, gg, onDone }) {
+function GradeComposer({ db, mut, student, gg, onDone, prefill, onPrefillConsumed }) {
   const subjects = gg?.subjects || [];
-  const [subjectId, setSubjectId] = useState(subjects[0]?.id || '');
+  // `prefill` (from Review's "Grade this") seeds subject/title/work so the parent
+  // lands on a ready-to-grade form. It only ever matches the current student here.
+  const [subjectId, setSubjectId] = useState(() =>
+    (prefill?.subjectId && subjects.some(s => s.id === prefill.subjectId))
+      ? prefill.subjectId
+      : (subjects[0]?.id || ''));
   const [rigor, setRigor] = useState('standard');
   const [src, setSrc]     = useState('paste'); // paste | blog | upload
-  const [title, setTitle] = useState('');
-  const [text, setText]   = useState('');
+  const [title, setTitle] = useState(() => prefill?.title || '');
+  const [text, setText]   = useState(() => prefill?.text || '');
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -73,11 +84,22 @@ function GradeComposer({ db, mut, student, gg, onDone }) {
   const [postList, setPostList] = useState(null);
   const [pullError, setPullError] = useState(null);
   const [imgBusy, setImgBusy] = useState(false);
+  const [fromReview, setFromReview] = useState(() => !!prefill); // for the "loaded from Review" note
 
   const subject = subjects.find(s => s.id === subjectId);
   const stats = textStats(text);
 
-  const reset = () => { setTitle(''); setText(''); setImages([]); setProposal(null); setError(null); setPostList(null); setPullError(null); };
+  // Prefill is consumed once, on mount: clear it upstream so a later plain visit
+  // to Grades starts clean, and bring the seeded form into view.
+  useEffect(() => {
+    if (prefill) {
+      onPrefillConsumed?.();
+      if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const reset = () => { setTitle(''); setText(''); setImages([]); setProposal(null); setError(null); setPostList(null); setPullError(null); setFromReview(false); };
 
   const pullPosts = async () => {
     if (!student?.blogUrl) { setPullError('No blog address saved for this student. Add one in Setup → Students, or paste the text instead.'); return; }
@@ -155,6 +177,14 @@ function GradeComposer({ db, mut, student, gg, onDone }) {
 
   return (
     <div>
+      {fromReview && (
+        <div style={{ display:'flex', alignItems:'center', gap:8, background:'#FEF3C7', border:`1px solid ${C.gold}55`, color:C.navy, borderRadius:10, padding:'9px 12px', marginBottom:12, fontSize:12.5 }}>
+          <span style={{ fontSize:15 }}>🎓</span>
+          <span style={{ flex:1 }}>Loaded from Review for <strong>{student.name}</strong> — check the subject and work below, then grade it.</span>
+          <button onClick={()=>setFromReview(false)} style={{ background:'none', border:'none', color:C.muted, cursor:'pointer', fontSize:16, lineHeight:1, padding:0 }} aria-label="Dismiss">✕</button>
+        </div>
+      )}
+
       {/* Setup row */}
       <div style={{ ...card, marginBottom:14 }}>
         <div style={{ display:'flex', gap:16, flexWrap:'wrap', alignItems:'flex-end', marginBottom:14 }}>

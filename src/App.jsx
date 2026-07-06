@@ -47,6 +47,8 @@ export default function App() {
   const [weekMon, setWk]  = useState(() => getMon(TODAY));
   const [planGG, setPGG]  = useState(INIT.gradeGroups[0].id);
   const [showPin, setShowPin] = useState(false);
+  // Prefill payload for the Grades composer when jumping straight from Review.
+  const [gradePrefill, setGradePrefill] = useState(null);
 
   const handleModeToggle = () => {
     if (mode === 'student') {
@@ -124,6 +126,8 @@ export default function App() {
     : [['today','📅 Today']];
 
   const goToPlan = (ggId) => { setPGG(ggId); setView('plan'); };
+  // Review → Grades: carry the submission's student/subject/work into the composer.
+  const goToGrade = (payload) => { setGradePrefill({ ...payload, token: Date.now() }); setView('grades'); };
 
   return (
     <div style={{ fontFamily:'system-ui,-apple-system,sans-serif', minHeight:'100vh', background:C.bg }}>
@@ -208,9 +212,9 @@ export default function App() {
             {view==='today' && mode==='parent'  && <Overview db={db} />}
             {view==='week'  && mode==='parent'  && <WeekOverview db={db} weekMon={weekMon} setWk={setWk} onGoToPlan={goToPlan} />}
             {view==='plan'  && mode==='parent'  && <Planner db={db} mut={mut} weekMon={weekMon} setWk={setWk} activeGG={planGG} setActiveGG={setPGG} />}
-            {view==='review'&& mode==='parent'  && <Review db={db} mut={mut} />}
+            {view==='review'&& mode==='parent'  && <Review db={db} mut={mut} onGradeThis={goToGrade} />}
             {view==='writing'&& mode==='parent'  && <WritingView db={db} mut={mut} />}
-            {view==='grades'&& mode==='parent'  && <GradesView db={db} mut={mut} />}
+            {view==='grades'&& mode==='parent'  && <GradesView db={db} mut={mut} prefill={gradePrefill} onPrefillConsumed={()=>setGradePrefill(null)} />}
             {view==='progress'&& mode==='parent'  && <ProgressView db={db} />}
             {view==='records'&& mode==='parent'  && <RecordsView db={db} />}
             {view==='export'&& mode==='parent'  && <ExportView db={db} weekMon={weekMon} setWk={setWk} />}

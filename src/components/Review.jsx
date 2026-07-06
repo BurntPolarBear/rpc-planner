@@ -4,7 +4,7 @@ import { Btn, C, card, inp, lbl } from '../utils/theme';
 
 
 // ─── REVIEW ───────────────────────────────────────────────────────────────────
-export function Review({ db, mut }) {
+export function Review({ db, mut, onGradeThis }) {
   const [filterDate, setFD] = useState(TODAY);
   const [filterSt, setFS]   = useState('pending');
 
@@ -46,16 +46,34 @@ export function Review({ db, mut }) {
         const wk      = getMon(sub.date);
         const pk      = `${gg?.id}:${wk}`;
         const lesson  = db.plans[pk]?.[sub.date]?.find(l=>l.subjectId===sub.subjectId);
-        return <SubCard key={sub.id} sub={sub} student={student} subj={subj} lesson={lesson} questions={lesson?.questions||[]} onApprove={()=>approve(sub.id)} onRevise={note=>revise(sub.id,note)} />;
+        return <SubCard key={sub.id} sub={sub} student={student} subj={subj} lesson={lesson} questions={lesson?.questions||[]} onApprove={()=>approve(sub.id)} onRevise={note=>revise(sub.id,note)} onGradeThis={onGradeThis} />;
       })}
     </div>
   );
 }
 
 
-function SubCard({ sub, student, subj, lesson, questions, onApprove, onRevise }) {
+function SubCard({ sub, student, subj, lesson, questions, onApprove, onRevise, onGradeThis }) {
   const [revNote, setRN] = useState(sub.parentNote||'');
   const [showRev, setSR] = useState(false);
+
+  // Assemble the student's written work into a clean block the grader can read.
+  const gradeText = () => {
+    const parts = [];
+    (sub.answers || []).forEach((ans, i) => {
+      const a = (ans || '').trim();
+      if (!a) return;
+      parts.push(questions[i] ? `Q: ${questions[i]}\nA: ${a}` : a);
+    });
+    return parts.join('\n\n');
+  };
+  const hasWork = (sub.answers || []).some(x => x?.trim());
+  const gradeThis = () => onGradeThis?.({
+    studentId: sub.studentId,
+    subjectId: sub.subjectId,
+    title: `${subj?.name ? subj.name + ' · ' : ''}Lesson ${sub.lessonNum}`,
+    text: gradeText(),
+  });
   const bgMap    = { approved:'#F0FDF4', pending:'#FFFBEB', needs_revision:'#FEF2F2' };
   const brdMap   = { approved:'#86EFAC', pending:'#FDE68A', needs_revision:'#FCA5A5' };
   const labelMap = { approved:'✅ Approved', needs_revision:'↩ Revision requested', pending:'⏳ Pending' };
@@ -101,10 +119,13 @@ function SubCard({ sub, student, subj, lesson, questions, onApprove, onRevise })
         </div>
       ))}
 
-      {sub.status!=='approved' && (
-        <div style={{ display:'flex', gap:8, marginTop:12, flexWrap:'wrap' }}>
-          <Btn onClick={onApprove} style={{ background:C.green, color:'white' }}>✅ Approve</Btn>
-          <Btn onClick={()=>setSR(r=>!r)} style={{ background:'#FEE2E2', color:C.red }}>↩ Request Revision</Btn>
+      {(sub.status!=='approved' || (onGradeThis && hasWork)) && (
+        <div style={{ display:'flex', gap:8, marginTop:12, flexWrap:'wrap', alignItems:'center' }}>
+          {sub.status!=='approved' && <Btn onClick={onApprove} style={{ background:C.green, color:'white' }}>✅ Approve</Btn>}
+          {sub.status!=='approved' && <Btn onClick={()=>setSR(r=>!r)} style={{ background:'#FEE2E2', color:C.red }}>↩ Request Revision</Btn>}
+          {onGradeThis && hasWork && (
+            <Btn onClick={gradeThis} title="Send this work to the Grades composer, pre-filled" style={{ background:'#FEF3C7', color:C.gold, marginLeft: sub.status!=='approved' ? 'auto' : 0 }}>🎓 Grade this →</Btn>
+          )}
         </div>
       )}
       {showRev && (
