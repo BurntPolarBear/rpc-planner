@@ -1,4 +1,3 @@
-
 // ─── DEFAULT DATA ─────────────────────────────────────────────────────────────
 export const INIT = {
   gradeGroups: [
@@ -38,7 +37,7 @@ export const INIT = {
   settings: { parentPin: '' }, // empty = no PIN required
 };
 
-export const KIND_OPTIONS = ['Assignment','Essay','Report','Project','Quiz','Test','Lab'];
+export const KIND_OPTIONS = ['Assignment','Essay','Report','Project','Quiz','Test','Lab','Narration','Problem Set','Copywork','Comprehension'];
 
 // Downscale a photo in the browser and return base64 (keeps serverless payloads small).
 async function fileToGradeImage(file, maxEdge = 1500, quality = 0.72) {
