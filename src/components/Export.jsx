@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { toDate, weekDays, weekLabel } from '../utils/dates';
 import { Btn, C, card, inp } from '../utils/theme';
+import { PortfolioView } from './Portfolio';
 
 
 // ─── EXPORT HELPERS ───────────────────────────────────────────────────────────
@@ -87,7 +88,34 @@ function buildICS(db, weekMon) {
 
 
 // ─── EXPORT VIEW ─────────────────────────────────────────────────────────────
+// Two distinct kinds of hand-off document live here: the weekly plan (share with
+// co-op parents / import to a calendar) and the full-year portfolio (a
+// consolidated record for a state or co-op evaluation).
 export function ExportView({ db, weekMon, setWk }) {
+  const [mode, setMode] = useState('week'); // week | portfolio
+
+  return (
+    <div>
+      {/* Segmented control — hidden on print so only the chosen document prints */}
+      <div className="no-print" style={{ display:'flex', gap:8, marginBottom:18, flexWrap:'wrap' }}>
+        {[['week','📅 Weekly Plan'], ['portfolio','📚 Year-End Portfolio']].map(([id, label]) => (
+          <Btn key={id} onClick={()=>setMode(id)} style={{
+            background: mode===id ? C.gold : 'white', color: mode===id ? 'white' : C.muted,
+            border:`1px solid ${mode===id ? C.gold : C.border}`,
+          }}>{label}</Btn>
+        ))}
+      </div>
+
+      {mode === 'week'
+        ? <WeeklyExport db={db} weekMon={weekMon} setWk={setWk} />
+        : <PortfolioView db={db} />}
+    </div>
+  );
+}
+
+
+// ─── WEEKLY PLAN EXPORT ───────────────────────────────────────────────────────
+function WeeklyExport({ db, weekMon, setWk }) {
   const [copied, setCopied] = useState(false);
   const summary = buildTextSummary(db, weekMon);
   const days    = weekDays(weekMon);
@@ -116,7 +144,7 @@ export function ExportView({ db, weekMon, setWk }) {
 
   return (
     <div>
-      <div style={{ fontFamily:'Georgia,serif', fontSize:21, fontWeight:'bold', color:C.navy, marginBottom:4 }}>Export</div>
+      <div style={{ fontFamily:'Georgia,serif', fontSize:21, fontWeight:'bold', color:C.navy, marginBottom:4 }}>Weekly Plan</div>
       <div style={{ fontSize:13, color:C.muted, marginBottom:18 }}>Share the week's plan with co-op parents or import into your calendar.</div>
 
       {/* Week selector */}
