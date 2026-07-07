@@ -31,6 +31,15 @@ function TabFallback() {
   );
 }
 
+// Full-screen centered message (loading / gate states).
+function Splash({ children }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:C.bg, fontFamily:'Georgia, serif', fontSize:18, color:C.navy }}>
+      {children}
+    </div>
+  );
+}
+
 // Single Supabase client for the whole app. Defined here (not a separate module)
 // so bundlers keep the realtime client used for cross-browser live sync.
 const supabase = createClient(
@@ -38,8 +47,102 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
+// ─── LOGIN ───────────────────────────────────────────────────────────────────
+// Passwordless sign-in: the parent enters their email and receives a one-time
+// magic link. Clicking it returns them here already signed in (supabase-js reads
+// the token from the URL automatically). No passwords are stored anywhere.
+function Login() {
+  const [email, setEmail]   = useState('');
+  const [status, setStatus] = useState('idle'); // idle | sending | sent | error
+  const [msg, setMsg]       = useState('');
+
+  const send = async (e) => {
+    e.preventDefault();
+    const addr = email.trim();
+    if (!addr) return;
+    setStatus('sending'); setMsg('');
+    const { error } = await supabase.auth.signInWithOtp({
+      email: addr,
+      options: { emailRedirectTo: window.location.origin },
+    });
+    if (error) { setStatus('error'); setMsg(error.message); }
+    else setStatus('sent');
+  };
+
+  return (
+    <div style={{ minHeight:'100vh', background:C.navy, display:'flex', alignItems:'center', justifyContent:'center', padding:20, fontFamily:'system-ui,-apple-system,sans-serif' }}>
+      <div style={{ background:'white', borderRadius:16, padding:'34px 30px', width:'100%', maxWidth:380, boxShadow:'0 12px 40px rgba(0,0,0,0.3)', borderTop:`4px solid ${C.gold}` }}>
+        <div style={{ fontFamily:'Georgia,serif', fontSize:24, color:C.navy, fontWeight:'bold', textAlign:'center', marginBottom:6 }}>
+          📋 RPC Planner
+        </div>
+        <div style={{ textAlign:'center', color:C.muted, fontSize:14, marginBottom:24 }}>
+          Sign in to your family's planner
+        </div>
+
+        {status === 'sent' ? (
+          <div style={{ textAlign:'center', color:C.navy, fontSize:15, lineHeight:1.5 }}>
+            <div style={{ fontSize:34, marginBottom:10 }}>📬</div>
+            Check your email — we sent a sign-in link to<br /><strong>{email.trim()}</strong>.
+            <div style={{ color:C.muted, fontSize:13, marginTop:14 }}>
+              Open it on this device and you'll be signed in. The link expires shortly.
+            </div>
+            <button onClick={() => { setStatus('idle'); setEmail(''); }} style={{ marginTop:18, background:'none', border:'none', color:C.gold, fontSize:13, fontWeight:700, cursor:'pointer' }}>
+              Use a different email
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={send}>
+            <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', color:C.muted, marginBottom:6 }}>
+              Email address
+            </label>
+            <input
+              type="email" required autoFocus value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              style={{ width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'11px 13px', fontSize:15, fontFamily:'inherit', boxSizing:'border-box', marginBottom:14 }}
+            />
+            <button
+              type="submit" disabled={status === 'sending'}
+              style={{ width:'100%', background:C.navy, color:'white', border:'none', borderRadius:8, padding:'12px', fontSize:15, fontWeight:700, cursor: status==='sending' ? 'default' : 'pointer', opacity: status==='sending' ? 0.7 : 1 }}
+            >
+              {status === 'sending' ? 'Sending…' : 'Email me a sign-in link'}
+            </button>
+            {status === 'error' && (
+              <div style={{ marginTop:12, color:C.red, fontSize:13, textAlign:'center' }}>{msg || 'Something went wrong. Try again.'}</div>
+            )}
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── NO ACCESS ───────────────────────────────────────────────────────────────
+// Shown when someone signs in with an email that isn't on the approved list.
+function NoAccess({ email, onSignOut }) {
+  return (
+    <div style={{ minHeight:'100vh', background:C.navy, display:'flex', alignItems:'center', justifyContent:'center', padding:20, fontFamily:'system-ui,-apple-system,sans-serif' }}>
+      <div style={{ background:'white', borderRadius:16, padding:'34px 30px', width:'100%', maxWidth:400, boxShadow:'0 12px 40px rgba(0,0,0,0.3)', borderTop:`4px solid ${C.gold}`, textAlign:'center' }}>
+        <div style={{ fontSize:34, marginBottom:10 }}>🔑</div>
+        <div style={{ fontFamily:'Georgia,serif', fontSize:20, color:C.navy, fontWeight:'bold', marginBottom:8 }}>
+          You're signed in, but not approved yet
+        </div>
+        <div style={{ color:C.muted, fontSize:14, lineHeight:1.5 }}>
+          <strong>{email}</strong> isn't on this planner's approved list. Ask the
+          organizer to add your email, then sign in again.
+        </div>
+        <button onClick={onSignOut} style={{ marginTop:20, background:C.navy, color:'white', border:'none', borderRadius:8, padding:'10px 18px', fontSize:14, fontWeight:700, cursor:'pointer' }}>
+          Sign out
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── ROOT ────────────────────────────────────────────────────────────────────
 export default function App() {
+  const [session, setSession]   = useState(null);
+  const [authReady, setAuthReady] = useState(false);
   const [db, setDb]       = useState(null);
   const [view, setView]   = useState('today');
   const [mode, setMode]   = useState('student');
@@ -49,6 +152,23 @@ export default function App() {
   const [showPin, setShowPin] = useState(false);
   // Prefill payload for the Grades composer when jumping straight from Review.
   const [gradePrefill, setGradePrefill] = useState(null);
+  const [access, setAccess] = useState('checking'); // checking | ok | denied
+
+  // Auth bootstrap: read any existing session, then listen for sign-in/out
+  // (also fires when a magic link is opened and the session is established).
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthReady(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
+      setSession(sess);
+      setAuthReady(true);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const userId = session?.user?.id;
 
   const handleModeToggle = () => {
     if (mode === 'student') {
@@ -60,35 +180,51 @@ export default function App() {
     }
   };
 
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setDb(null); setAccess('checking'); setMode('student'); setView('today'); setStu(null);
+  };
+
   const loadData = useCallback(async () => {
+    if (!userId) return;
     try {
-      const { data, error } = await supabase
-        .from('app_data')
+      const { data } = await supabase
+        .from('shared_data')
         .select('content')
         .eq('id', 1)
-        .single();
-      if (data?.content?.gradeGroups) setDb(data.content);
-      else setDb(INIT);
+        .maybeSingle();
+      if (data?.content?.gradeGroups) {
+        setDb(data.content); setAccess('ok');
+      } else {
+        // No row visible. Either the shared planner is not set up yet, or this
+        // signed-in email is not on the approved list (RLS hides the row).
+        // The seed below succeeds only for an approved member.
+        const { error: seedErr } = await supabase
+          .from('shared_data').upsert({ id: 1, content: INIT });
+        if (seedErr) setAccess('denied');
+        else { setDb(INIT); setAccess('ok'); }
+      }
     } catch {
-      setDb(INIT);
+      setAccess('denied');
     }
-  }, []);
+  }, [userId]);
 
   // Track our own writes so realtime echoes of them don't clobber newer local state
   const pendingWrites = useRef(0);
 
   useEffect(() => {
+    if (!userId) { setDb(null); setAccess('checking'); return; }
     loadData();
 
     // Fallback: refresh when tab regains focus
     const handleVisibility = () => { if (!document.hidden) loadData(); };
     document.addEventListener('visibilitychange', handleVisibility);
 
-    // Realtime: any change another browser makes shows up here within seconds
+    // Realtime: changes to THIS account's row (from another device) show up here.
     const channel = supabase
-      .channel('app_data_changes')
+      .channel('shared_data_changes')
       .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'app_data', filter: 'id=eq.1' },
+        { event: 'UPDATE', schema: 'public', table: 'shared_data', filter: 'id=eq.1' },
         (payload) => {
           // Ignore echoes of our own in-flight writes
           if (pendingWrites.current > 0) return;
@@ -101,25 +237,27 @@ export default function App() {
       document.removeEventListener('visibilitychange', handleVisibility);
       supabase.removeChannel(channel);
     };
-  }, [loadData]);
+  }, [userId, loadData]);
 
   const mut = fn => setDb(prev => {
     const next = JSON.parse(JSON.stringify(prev));
     fn(next);
     pendingWrites.current += 1;
     supabase
-      .from('app_data')
-      .upsert({ id: 1, content: next })
-      .then(() => { pendingWrites.current = Math.max(0, pendingWrites.current - 1); })
-      .catch(err => { pendingWrites.current = Math.max(0, pendingWrites.current - 1); console.error(err); });
+      .from('shared_data')
+      .upsert({ id: 1, content: next, updated_at: new Date().toISOString() })
+      .then(({ error }) => {
+        if (error) console.error(error);
+        pendingWrites.current = Math.max(0, pendingWrites.current - 1);
+      });
     return next;
   });
 
-  if (!db) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:C.bg, fontFamily:'Georgia, serif', fontSize:18, color:C.navy }}>
-      Loading your planner…
-    </div>
-  );
+  // ── Gates ──
+  if (!authReady) return <Splash>Loading…</Splash>;
+  if (!session)   return <Login />;
+  if (access === 'denied') return <NoAccess email={session.user?.email} onSignOut={signOut} />;
+  if (!db)        return <Splash>Loading your planner…</Splash>;
 
   const navItems = mode === 'parent'
     ? [['today','📊 Today'], ['week','🗓 Week'], ['plan','📋 Plan'], ['review','✅ Review'], ['writing','✍️ Writing'], ['grades','🎓 Grades'], ['progress','📈 Progress'], ['records','📄 Records'], ['export','📤 Export'], ['setup','⚙️ Setup']]
@@ -173,12 +311,23 @@ export default function App() {
         <span className="app-header-title" style={{ fontFamily:'Georgia,serif', fontSize:18, color:'white', fontWeight:'bold', letterSpacing:'-0.3px' }}>
           📋 RPC Planner
         </span>
-        <Btn
-          onClick={handleModeToggle}
-          style={{ background: mode==='parent' ? C.gold : 'rgba(255,255,255,0.15)', color:'white', padding:'6px 14px' }}
-        >
-          {mode==='parent' ? '👨‍👩‍👧 Parent Mode' : '🔒 Parent Mode'}
-        </Btn>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <Btn
+            onClick={handleModeToggle}
+            style={{ background: mode==='parent' ? C.gold : 'rgba(255,255,255,0.15)', color:'white', padding:'6px 14px' }}
+          >
+            {mode==='parent' ? '👨‍👩‍👧 Parent Mode' : '🔒 Parent Mode'}
+          </Btn>
+          {mode==='parent' && (
+            <Btn
+              onClick={signOut}
+              title="Sign out"
+              style={{ background:'rgba(255,255,255,0.15)', color:'white', padding:'6px 12px' }}
+            >
+              Sign out
+            </Btn>
+          )}
+        </div>
       </header>
 
       {showPin && (
