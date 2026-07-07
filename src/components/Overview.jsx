@@ -1,11 +1,33 @@
+import { useState } from 'react';
+import { StudentToday } from './StudentView';
 import { TODAY, getMon, shortDate, toDate, weekDays, weekLabel } from '../utils/dates';
 import { Btn, C, card } from '../utils/theme';
 
 
 // ─── PARENT OVERVIEW ──────────────────────────────────────────────────────────
 export function Overview({ db, onReview }) {
+  const [previewId, setPreviewId] = useState(null);
   const pending = db.answers.filter(a => a.status==='pending' && a.answers?.some(x=>x?.trim())).length;
   const goReview = () => onReview?.();
+
+  // Read-only mirror: tap a student to see the exact card they see on their own
+  // side. readOnly disables every input/action, so viewing here can never alter
+  // the student's work — approvals still happen in the Review tab.
+  if (previewId) {
+    const st = db.students.find(s => s.id === previewId);
+    return (
+      <div>
+        <div style={{ display:'flex', alignItems:'center', gap:8, background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:10, padding:'9px 14px', marginBottom:16 }}>
+          <span style={{ fontSize:15 }}>👁</span>
+          <span style={{ fontSize:13, fontWeight:700, color:'#1E40AF' }}>
+            Read-only preview — exactly what {st?.name || 'the student'} sees today
+          </span>
+        </div>
+        <StudentToday db={db} stuId={previewId} readOnly onBack={() => setPreviewId(null)} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <div style={{ fontFamily:'Georgia,serif', fontSize:22, fontWeight:'bold', color:C.navy, marginBottom:4 }}>Today's Overview</div>
@@ -36,7 +58,15 @@ export function Overview({ db, onReview }) {
                 const approved = subs.filter(a => a.status==='approved').length;
                 const revise   = subs.filter(a => a.status==='needs_revision').length;
                 return (
-                  <div key={st.id} style={card}>
+                  <div key={st.id}
+                    onClick={() => setPreviewId(st.id)}
+                    role="button" tabIndex={0}
+                    onKeyDown={e => { if (e.key==='Enter' || e.key===' ') { e.preventDefault(); setPreviewId(st.id); } }}
+                    title={`View ${st.name}'s day`}
+                    style={{ ...card, border:'2px solid transparent', cursor:'pointer', transition:'all .15s' }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor=C.gold; e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow='0 2px 6px rgba(15,30,48,0.08), 0 10px 28px rgba(15,30,48,0.10)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor='transparent'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='0 1px 2px rgba(15,30,48,0.05), 0 4px 14px rgba(15,30,48,0.05)'; }}
+                  >
                     <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
                       <span style={{ fontSize:26 }}>{st.emoji}</span>
                       <div>
@@ -70,6 +100,7 @@ export function Overview({ db, onReview }) {
                           </div>
                         </>
                     }
+                    <div style={{ marginTop:12, fontSize:11, fontWeight:800, color:C.gold, letterSpacing:'0.04em' }}>View day →</div>
                   </div>
                 );
               })}

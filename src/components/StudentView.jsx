@@ -5,7 +5,7 @@ import { Btn, C, card, inp, lbl } from '../utils/theme';
 
 
 // ─── STUDENT TODAY ────────────────────────────────────────────────────────────
-export function StudentToday({ db, stuId, setStu, mut }) {
+export function StudentToday({ db, stuId, setStu, mut, readOnly = false, onBack }) {
   const [screen, setScreen] = useState('day');
   if (!stuId) return <StudentPicker db={db} setStu={setStu} />;
 
@@ -84,7 +84,7 @@ export function StudentToday({ db, stuId, setStu, mut }) {
     <div>
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16, flexWrap:'wrap' }}>
-        <Btn onClick={() => setStu(null)} style={{ background:'#E8EEF4', color:C.navy, padding:'6px 12px', fontSize:12 }}>← Back</Btn>
+        <Btn onClick={() => onBack ? onBack() : setStu(null)} style={{ background:'#E8EEF4', color:C.navy, padding:'6px 12px', fontSize:12 }}>← Back</Btn>
         <div style={{ flex:1, minWidth:140 }}>
           <div style={{ fontFamily:'Georgia,serif', fontSize:21, fontWeight:'bold', color:C.navy }}>{student?.emoji} {student?.name}'s Day</div>
           <div style={{ fontSize:13, color:C.muted }}>{shortDate(TODAY)} · {gg?.name}</div>
@@ -132,7 +132,7 @@ export function StudentToday({ db, stuId, setStu, mut }) {
             return (
               <LessonCard
                 key={`${lesson.originalDate}-${lesson.subjectId}`}
-                subj={subj} lesson={lesson} submission={sub}
+                subj={subj} lesson={lesson} submission={sub} readOnly={readOnly}
                 fromDate={shortDate(lesson.originalDate)}
                 onSave={(ans, doneT) => save(lesson.subjectId, lesson.lessonNum, ans, doneT, lesson.originalDate)}
                 onComplete={doneT => complete(lesson.subjectId, lesson.lessonNum, doneT, lesson.originalDate)}
@@ -165,7 +165,7 @@ export function StudentToday({ db, stuId, setStu, mut }) {
             const subj = gg?.subjects.find(s => s.id === lesson.subjectId);
             if (!subj) return null;
             const sub = todaySubs.find(a => a.subjectId === lesson.subjectId);
-            return <LessonCard key={lesson.subjectId} subj={subj} lesson={lesson} submission={sub}
+            return <LessonCard key={lesson.subjectId} subj={subj} lesson={lesson} submission={sub} readOnly={readOnly}
               onSave={(ans, doneT) => save(lesson.subjectId, lesson.lessonNum, ans, doneT)}
               onComplete={doneT => complete(lesson.subjectId, lesson.lessonNum, doneT)}
               onTasksChange={doneT => saveTasks(lesson.subjectId, lesson.lessonNum, doneT)}
@@ -180,7 +180,7 @@ export function StudentToday({ db, stuId, setStu, mut }) {
           <div style={{ fontSize:11, fontWeight:700, color:C.muted, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:10 }}>
             Today's Activities
           </div>
-          {todayActivities.map(act => <ActivityCard key={act.id} activity={act} done={isActDone(act.id)} onToggle={() => toggleActivity(act.id)} />)}
+          {todayActivities.map(act => <ActivityCard key={act.id} activity={act} done={isActDone(act.id)} onToggle={readOnly ? undefined : () => toggleActivity(act.id)} />)}
         </div>
       )}
     </div>
@@ -301,7 +301,7 @@ function ActivityCard({ activity: a, done, onToggle }) {
 
 
 // ─── LESSON CARD ──────────────────────────────────────────────────────────────
-function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChange, fromDate }) {
+function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChange, fromDate, readOnly = false }) {
   const taskList    = lesson.tasks || [];
   const hasQuestions = (lesson.questions||[]).length > 0;
   const hasTasks     = taskList.length > 0;
@@ -369,7 +369,7 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
 
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           {status && <span style={{ fontSize:12, fontWeight:700, color:statusColor[status] }}>{statusLabel[status]}</span>}
-          {!hasQuestions && !hasTasks && status !== 'approved' && onComplete && (
+          {!readOnly && !hasQuestions && !hasTasks && status !== 'approved' && onComplete && (
             <button onClick={handleComplete} style={{
               border:'none', borderRadius:8, padding:'7px 16px', cursor:'pointer',
               fontSize:13, fontWeight:700,
@@ -407,14 +407,14 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
               {taskList.map((t, i) => (
                 <button
                   key={i}
-                  onClick={() => status !== 'approved' && toggleTask(i)}
-                  disabled={status === 'approved'}
+                  onClick={() => !readOnly && status !== 'approved' && toggleTask(i)}
+                  disabled={readOnly || status === 'approved'}
                   style={{
                     display:'flex', alignItems:'center', gap:12, width:'100%',
                     background: doneT[i] ? '#F0FDF4' : '#FAFAFA',
                     border:`1px solid ${doneT[i] ? '#86EFAC' : C.border}`,
                     borderRadius:8, padding:'10px 12px', marginBottom:6,
-                    cursor: status === 'approved' ? 'default' : 'pointer',
+                    cursor: (readOnly || status === 'approved') ? 'default' : 'pointer',
                     textAlign:'left', transition:'all .15s',
                   }}
                 >
@@ -442,14 +442,14 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
               <textarea
                 value={ans[i]||''}
                 onChange={e => { const n=[...ans]; n[i]=e.target.value; setAns(n); }}
-                disabled={status==='approved'}
+                disabled={status==='approved' || readOnly}
                 placeholder="Write your answer here…"
                 style={{ ...inp, width:'100%', resize:'vertical', minHeight:64 }}
               />
             </div>
           ))}
           {/* Submit */}
-          {hasQuestions && status!=='approved' && (
+          {!readOnly && hasQuestions && status!=='approved' && (
             <button onClick={save} style={{
               border:'none', borderRadius:8, padding:'10px 0', cursor:'pointer', fontSize:14,
               fontWeight:700, width:'100%', transition:'background .2s',
