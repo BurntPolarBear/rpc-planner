@@ -209,7 +209,7 @@ export default function App() {
         <ErrorBoundary key={view}>
           <Suspense fallback={<TabFallback />}>
             {view==='today' && mode==='student' && <StudentToday db={db} stuId={stuId} setStu={setStu} mut={mut} />}
-            {view==='today' && mode==='parent'  && <Overview db={db} />}
+            {view==='today' && mode==='parent'  && <Overview db={db} onReview={() => setView('review')} />}
             {view==='week'  && mode==='parent'  && <WeekOverview db={db} weekMon={weekMon} setWk={setWk} onGoToPlan={goToPlan} />}
             {view==='plan'  && mode==='parent'  && <Planner db={db} mut={mut} weekMon={weekMon} setWk={setWk} activeGG={planGG} setActiveGG={setPGG} />}
             {view==='review'&& mode==='parent'  && <Review db={db} mut={mut} onGradeThis={goToGrade} />}
