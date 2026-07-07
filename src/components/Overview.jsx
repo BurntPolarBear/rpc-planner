@@ -3,15 +3,24 @@ import { Btn, C, card } from '../utils/theme';
 
 
 // ─── PARENT OVERVIEW ──────────────────────────────────────────────────────────
-export function Overview({ db }) {
+export function Overview({ db, onReview }) {
   const pending = db.answers.filter(a => a.status==='pending' && a.answers?.some(x=>x?.trim())).length;
+  const goReview = () => onReview?.();
   return (
     <div>
       <div style={{ fontFamily:'Georgia,serif', fontSize:22, fontWeight:'bold', color:C.navy, marginBottom:4 }}>Today's Overview</div>
       <div style={{ fontSize:14, color:C.muted, marginBottom: pending>0?12:20 }}>{shortDate(TODAY)}</div>
       {pending>0 && (
-        <div style={{ background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:10, padding:'10px 16px', marginBottom:20 }}>
+        <div
+          onClick={onReview ? goReview : undefined}
+          role={onReview ? 'button' : undefined}
+          tabIndex={onReview ? 0 : undefined}
+          onKeyDown={onReview ? (e => { if (e.key==='Enter' || e.key===' ') { e.preventDefault(); goReview(); } }) : undefined}
+          title={onReview ? 'Go to Review' : undefined}
+          style={{ background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:10, padding:'10px 16px', marginBottom:20, cursor: onReview ? 'pointer' : 'default', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}
+        >
           <span style={{ fontSize:13, fontWeight:700, color:'#92400E' }}>⏳ {pending} submission{pending>1?'s':''} waiting for your review</span>
+          {onReview && <span style={{ fontSize:13, fontWeight:700, color:'#92400E', whiteSpace:'nowrap' }}>Review →</span>}
         </div>
       )}
       {db.gradeGroups.map(gg => {
