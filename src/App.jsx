@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { PinModal } from './components/PinModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { StudentToday } from './components/StudentView';
 import { INIT } from './utils/constants';
 import { TODAY, getMon } from './utils/dates';
 import { Btn, C } from './utils/theme';
+import { supabase } from './utils/supabaseClient';
 
 // Parent-only tabs are code-split so students never download them and each tab's
 // JS loads on first visit instead of up front. React.lazy expects a default
@@ -40,12 +40,6 @@ function Splash({ children }) {
   );
 }
 
-// Single Supabase client for the whole app. Defined here (not a separate module)
-// so bundlers keep the realtime client used for cross-browser live sync.
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
 
 // ─── LOGIN ───────────────────────────────────────────────────────────────────
 // Parents sign in with a passwordless email magic link. Students use a shared
@@ -62,6 +56,8 @@ function Login({ onDemo }) {
   const [code, setCode]     = useState('');
   const [sErr, setSErr]     = useState('');
   const [sBusy, setSBusy]   = useState(false);
+  const [smode, setSmode]   = useState('class'); // class | account
+  const [user, setUser]     = useState('');
 
   const send = async (e) => {
     e.preventDefault();
@@ -85,6 +81,17 @@ function Login({ onDemo }) {
     const { error } = await supabase.auth.signInAnonymously();
     if (error) { setSBusy(false); setSErr('Could not sign in. Ask a parent for help.'); }
     // On success, onAuthStateChange establishes the session and the app loads.
+  };
+
+  const accountEnter = async (e) => {
+    e.preventDefault();
+    const u = user.trim().toLowerCase();
+    if (!u || !code.trim()) { setSErr('Enter your username and passcode.'); return; }
+    setSBusy(true); setSErr('');
+    const { error } = await supabase.auth.signInWithPassword({
+      email: `${u}@students.rpcplanner.app`, password: code.trim(),
+    });
+    if (error) { setSBusy(false); setSErr('That username or passcode is not right.'); }
   };
 
   const cardWrap = { minHeight:'100vh', background:C.navy, display:'flex', alignItems:'center', justifyContent:'center', padding:20, fontFamily:'system-ui,-apple-system,sans-serif' };
@@ -135,24 +142,52 @@ function Login({ onDemo }) {
             </form>
           )
         ) : (
-          <form onSubmit={studentEnter}>
-            <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', color:C.muted, marginBottom:6 }}>
-              Student passcode
-            </label>
-            <input
-              type="password" required autoFocus value={code}
-              onChange={e => setCode(e.target.value)}
-              placeholder="Enter your class code"
-              style={{ width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'11px 13px', fontSize:15, fontFamily:'inherit', boxSizing:'border-box', marginBottom:14 }}
-            />
-            <button
-              type="submit" disabled={sBusy}
-              style={{ width:'100%', background:C.navy, color:'white', border:'none', borderRadius:8, padding:'12px', fontSize:15, fontWeight:700, cursor: sBusy ? 'default' : 'pointer', opacity: sBusy ? 0.7 : 1 }}
-            >
-              {sBusy ? 'Signing in…' : 'Start school'}
-            </button>
-            {sErr && <div style={{ marginTop:12, color:C.red, fontSize:13, textAlign:'center' }}>{sErr}</div>}
-          </form>
+          smode === 'account' ? (
+            <form onSubmit={accountEnter}>
+              <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', color:C.muted, marginBottom:6 }}>Username</label>
+              <input
+                type="text" required autoFocus value={user}
+                onChange={e => setUser(e.target.value)}
+                placeholder="your username"
+                style={{ width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'11px 13px', fontSize:15, fontFamily:'inherit', boxSizing:'border-box', marginBottom:14 }}
+              />
+              <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', color:C.muted, marginBottom:6 }}>Passcode</label>
+              <input
+                type="password" required value={code}
+                onChange={e => setCode(e.target.value)}
+                placeholder="your passcode"
+                style={{ width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'11px 13px', fontSize:15, fontFamily:'inherit', boxSizing:'border-box', marginBottom:14 }}
+              />
+              <button type="submit" disabled={sBusy} style={{ width:'100%', background:C.navy, color:'white', border:'none', borderRadius:8, padding:'12px', fontSize:15, fontWeight:700, cursor: sBusy ? 'default' : 'pointer', opacity: sBusy ? 0.7 : 1 }}>
+                {sBusy ? 'Signing in…' : 'Start school'}
+              </button>
+              {sErr && <div style={{ marginTop:12, color:C.red, fontSize:13, textAlign:'center' }}>{sErr}</div>}
+              <div style={{ textAlign:'center', marginTop:14 }}>
+                <button type="button" onClick={() => { setSmode('class'); setSErr(''); }} style={{ background:'none', border:'none', color:C.gold, fontSize:12.5, fontWeight:700, cursor:'pointer' }}>
+                  Use the class code instead →
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={studentEnter}>
+              <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', color:C.muted, marginBottom:6 }}>Class passcode</label>
+              <input
+                type="password" required autoFocus value={code}
+                onChange={e => setCode(e.target.value)}
+                placeholder="Enter your class code"
+                style={{ width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'11px 13px', fontSize:15, fontFamily:'inherit', boxSizing:'border-box', marginBottom:14 }}
+              />
+              <button type="submit" disabled={sBusy} style={{ width:'100%', background:C.navy, color:'white', border:'none', borderRadius:8, padding:'12px', fontSize:15, fontWeight:700, cursor: sBusy ? 'default' : 'pointer', opacity: sBusy ? 0.7 : 1 }}>
+                {sBusy ? 'Signing in…' : 'Start school'}
+              </button>
+              {sErr && <div style={{ marginTop:12, color:C.red, fontSize:13, textAlign:'center' }}>{sErr}</div>}
+              <div style={{ textAlign:'center', marginTop:14 }}>
+                <button type="button" onClick={() => { setSmode('account'); setSErr(''); }} style={{ background:'none', border:'none', color:C.gold, fontSize:12.5, fontWeight:700, cursor:'pointer' }}>
+                  Sign in with your name →
+                </button>
+              </div>
+            </form>
+          )
         )}
 
         <div style={{ textAlign:'center', marginTop:20, paddingTop:16, borderTop:`1px solid ${C.border}` }}>
@@ -245,6 +280,7 @@ export default function App() {
   const demoMut = fn => setDemoDb(prev => { const next = JSON.parse(JSON.stringify(prev)); fn(next); return next; });
 
   const activeDb = demo ? demoDb : db;
+  const isStudent = session?.user?.user_metadata?.role === 'student';
 
   const handleModeToggle = () => {
     if (mode === 'student') {
@@ -263,6 +299,17 @@ export default function App() {
 
   const loadData = useCallback(async () => {
     if (!userId) return;
+    // Student accounts get only their own slice, via a locked-down DB function.
+    if (isStudent) {
+      const { data, error } = await supabase.rpc('student_today');
+      if (!error && data && Array.isArray(data.students) && data.students.length > 0) {
+        setDb(data); setAccess('ok');
+        setStu(session?.user?.user_metadata?.student_id || null);
+      } else {
+        setAccess('denied');
+      }
+      return;
+    }
     try {
       const { data } = await supabase
         .from('shared_data')
@@ -272,9 +319,6 @@ export default function App() {
       if (data?.content?.gradeGroups) {
         setDb(data.content); setAccess('ok');
       } else {
-        // No row visible. Either the shared planner is not set up yet, or this
-        // signed-in email is not on the approved list (RLS hides the row).
-        // The seed below succeeds only for an approved member.
         const { error: seedErr } = await supabase
           .from('shared_data').upsert({ id: 1, content: INIT });
         if (seedErr) setAccess('denied');
@@ -283,7 +327,7 @@ export default function App() {
     } catch {
       setAccess('denied');
     }
-  }, [userId]);
+  }, [userId, isStudent, session]);
 
   // Track our own writes so realtime echoes of them don't clobber newer local state
   const pendingWrites = useRef(0);
@@ -297,23 +341,27 @@ export default function App() {
     document.addEventListener('visibilitychange', handleVisibility);
 
     // Realtime: changes to THIS account's row (from another device) show up here.
-    const channel = supabase
-      .channel('shared_data_changes')
-      .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'shared_data', filter: 'id=eq.1' },
-        (payload) => {
-          // Ignore echoes of our own in-flight writes
-          if (pendingWrites.current > 0) return;
-          if (payload.new?.content?.gradeGroups) setDb(payload.new.content);
-        }
-      )
-      .subscribe();
+    // Parents get live cross-device sync on the shared row. Students can't read
+    // that row at all, so they refresh on focus instead.
+    let channel = null;
+    if (!isStudent) {
+      channel = supabase
+        .channel('shared_data_changes')
+        .on('postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'shared_data', filter: 'id=eq.1' },
+          (payload) => {
+            if (pendingWrites.current > 0) return;
+            if (payload.new?.content?.gradeGroups) setDb(payload.new.content);
+          }
+        )
+        .subscribe();
+    }
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
-  }, [userId, loadData]);
+  }, [userId, loadData, isStudent]);
 
   const mut = fn => setDb(prev => {
     const next = JSON.parse(JSON.stringify(prev));
@@ -329,7 +377,16 @@ export default function App() {
     return next;
   });
 
-  const activeMut = demo ? demoMut : mut;
+  // Students persist only their own answers/activity logs through a guarded RPC.
+  const studentMut = fn => setDb(prev => {
+    const next = JSON.parse(JSON.stringify(prev));
+    fn(next);
+    supabase.rpc('student_write', { p_answers: next.answers || [], p_activity_logs: next.activityLogs || [] })
+      .then(({ error }) => { if (error) console.error(error); });
+    return next;
+  });
+
+  const activeMut = demo ? demoMut : isStudent ? studentMut : mut;
 
   // ── Gates ──
   if (!demo) {
@@ -394,29 +451,23 @@ export default function App() {
           📋 RPC Planner
         </span>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          <Btn
-            onClick={handleModeToggle}
-            style={{ background: mode==='parent' ? C.gold : 'rgba(255,255,255,0.15)', color:'white', padding:'6px 14px' }}
-          >
-            {mode==='parent' ? '👨‍👩‍👧 Parent Mode' : '🔒 Parent Mode'}
-          </Btn>
-          {demo ? (
+          {!demo && !isStudent && (
             <Btn
-              onClick={exitDemo}
-              title="Exit demo"
-              style={{ background:C.gold, color:'white', padding:'6px 12px' }}
+              onClick={handleModeToggle}
+              style={{ background: mode==='parent' ? C.gold : 'rgba(255,255,255,0.15)', color:'white', padding:'6px 14px' }}
             >
+              {mode==='parent' ? '👨‍👩‍👧 Parent Mode' : '🔒 Parent Mode'}
+            </Btn>
+          )}
+          {demo ? (
+            <Btn onClick={exitDemo} title="Exit demo" style={{ background:C.gold, color:'white', padding:'6px 12px' }}>
               Exit demo
             </Btn>
-          ) : (mode==='parent' && (
-            <Btn
-              onClick={signOut}
-              title="Sign out"
-              style={{ background:'rgba(255,255,255,0.15)', color:'white', padding:'6px 12px' }}
-            >
+          ) : (isStudent || mode==='parent') ? (
+            <Btn onClick={signOut} title="Sign out" style={{ background:'rgba(255,255,255,0.15)', color:'white', padding:'6px 12px' }}>
               Sign out
             </Btn>
-          ))}
+          ) : null}
         </div>
       </header>
 

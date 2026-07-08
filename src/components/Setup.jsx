@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ACT_COLORS, DAY_LABELS } from '../utils/constants';
 import { toDate, uid } from '../utils/dates';
 import { Btn, C, card, inp, lbl } from '../utils/theme';
+import { supabase } from '../utils/supabaseClient';
 
 
 // ─── SETUP ────────────────────────────────────────────────────────────────────
@@ -11,11 +12,12 @@ export function Setup({ db, mut }) {
     <div>
       <div style={{ fontFamily:'Georgia,serif', fontSize:22, fontWeight:'bold', color:C.navy, marginBottom:16 }}>Settings</div>
       <div style={{ display:'flex', gap:8, marginBottom:20, flexWrap:'wrap' }}>
-        {[['students','👤 Students'],['courses','📚 Courses'],['templates','📋 Templates'],['activities','🏃 Activities'],['pin','🔒 Parent PIN'],['backup','💾 Backup']].map(([id,label])=>(
+        {[['students','👤 Students'],['logins','🔑 Logins'],['courses','📚 Courses'],['templates','📋 Templates'],['activities','🏃 Activities'],['pin','🔒 Parent PIN'],['backup','💾 Backup']].map(([id,label])=>(
           <Btn key={id} onClick={()=>setTab(id)} style={{ background:tab===id?C.navy:'white', color:tab===id?'white':C.muted, border:`1px solid ${C.border}` }}>{label}</Btn>
         ))}
       </div>
       {tab==='students'   && <StudentsTab db={db} mut={mut} />}
+      {tab==='logins'     && <StudentLoginsTab db={db} />}
       {tab==='courses'    && <CoursesTab db={db} mut={mut} />}
       {tab==='templates'  && <TemplatesTab db={db} mut={mut} />}
       {tab==='activities' && <ActivitiesTab db={db} mut={mut} />}
@@ -541,6 +543,102 @@ function TemplatesTab({ db, mut }) {
         onClick={() => mut(d => { if(!d.templates) d.templates=[]; const id=uid(); d.templates.push({id, name:'New template', hint:'', questions:['Question 1','Question 2','Question 3']}); setEditingId(id); setEN('New template'); setEQ('Question 1\nQuestion 2\nQuestion 3'); })}
         style={{ background:C.navy, color:'white', marginTop:4 }}
       >+ New Template</Btn>
+    </div>
+  );
+}
+
+
+// ─── STUDENT LOGINS TAB ───────────────────────────────────────────────────────
+// Parents create each student a name + passcode login here. Provisioning happens
+// server-side (service role) via /api/provision-student; this screen only sends
+// the request with the parent's session token.
+function StudentLoginsTab({ db }) {
+  const [profiles, setProfiles] = useState(null); // { studentId: {username} }
+  const [rows, setRows]         = useState({});    // studentId -> { username, passcode, busy, status }
+  const [loadErr, setLoadErr]   = useState('');
+
+  const load = async () => {
+    const { data, error } = await supabase.from('student_profiles').select('student_id, username');
+    if (error) { setLoadErr(error.message); setProfiles({}); return; }
+    const map = {};
+    (data || []).forEach(p => { map[p.student_id] = p; });
+    setProfiles(map);
+  };
+  useEffect(() => { load(); }, []);
+
+  const slug = (name) => (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 20);
+  const setField = (sid, field, val) => setRows(r => ({ ...r, [sid]: { ...r[sid], [field]: val } }));
+
+  const submit = async (sid, defaultUsername) => {
+    const row = rows[sid] || {};
+    const username = String(row.username ?? profiles?.[sid]?.username ?? defaultUsername).trim().toLowerCase();
+    const passcode = String(row.passcode || '').trim();
+    setRows(r => ({ ...r, [sid]: { ...r[sid], busy: true, status: '' } }));
+    const { data: sess } = await supabase.auth.getSession();
+    const token = sess?.session?.access_token;
+    try {
+      const res = await fetch('/api/provision-student', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ studentId: sid, username, passcode }),
+      });
+      const out = await res.json();
+      if (!res.ok) { setRows(r => ({ ...r, [sid]: { ...r[sid], busy: false, status: 'err:' + (out.error || 'Failed') } })); return; }
+      setRows(r => ({ ...r, [sid]: { ...r[sid], busy: false, passcode: '', status: 'ok:Saved.' } }));
+      load();
+    } catch {
+      setRows(r => ({ ...r, [sid]: { ...r[sid], busy: false, status: 'err:Network error. Try again.' } }));
+    }
+  };
+
+  if (profiles === null) return <div style={{ color: C.muted, fontSize: 14 }}>Loading…</div>;
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>
+        Give each student their own login. They sign in on the login screen with the username and passcode you set here — and only ever see their own day and their own work.
+      </div>
+      {loadErr && <div style={{ color: C.red, fontSize: 13, marginBottom: 12 }}>{loadErr}</div>}
+      {db.students.map(s => {
+        const existing = profiles[s.id];
+        const row = rows[s.id] || {};
+        const defaultUsername = existing?.username || slug(s.name);
+        const status = row.status || '';
+        return (
+          <div key={s.id} style={{ ...card, marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <span style={{ fontSize: 24 }}>{s.emoji}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: C.navy }}>{s.name}</div>
+                <div style={{ fontSize: 12, color: existing ? C.green : C.muted }}>
+                  {existing ? `✓ Login active — username: ${existing.username || '—'}` : 'No login yet'}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div style={{ flex: '1 1 150px' }}>
+                <label style={lbl}>Username</label>
+                <input value={row.username ?? defaultUsername} onChange={e => setField(s.id, 'username', e.target.value)}
+                  style={{ ...inp, width: '100%' }} />
+              </div>
+              <div style={{ flex: '1 1 150px' }}>
+                <label style={lbl}>{existing ? 'New passcode' : 'Passcode'}</label>
+                <input value={row.passcode || ''} onChange={e => setField(s.id, 'passcode', e.target.value)}
+                  placeholder="at least 4 characters" style={{ ...inp, width: '100%' }} />
+              </div>
+              <Btn onClick={() => submit(s.id, defaultUsername)} disabled={row.busy}
+                style={{ background: C.navy, color: 'white', opacity: row.busy ? 0.7 : 1 }}>
+                {row.busy ? 'Saving…' : existing ? 'Update passcode' : 'Create login'}
+              </Btn>
+            </div>
+            {status && (
+              <div style={{ marginTop: 10, fontSize: 13, color: status.startsWith('ok') ? C.green : C.red }}>
+                {status.slice(status.indexOf(':') + 1)}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
