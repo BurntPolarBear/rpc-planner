@@ -226,6 +226,8 @@ export default function App() {
   const [access, setAccess] = useState('checking'); // checking | ok | denied
   const [demo, setDemo]     = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  const sheetStartY = useRef(null);
   const [demoDb, setDemoDb] = useState(null);
 
   // Auth bootstrap: read any existing session, then listen for sign-in/out
@@ -403,8 +405,10 @@ export default function App() {
         .app-bottomnav { display:none; }
         .app-bn { display:flex; flex-direction:column; align-items:center; gap:2px; background:none; border:none; cursor:pointer; font-size:10px; color:${C.muted}; padding:2px 6px; }
         .app-bn[data-on="true"] { color:${C.gold}; font-weight:700; }
+        .nav-toggle { display:inline-block; }
         @media (max-width: 900px) {
           .app-sidebar { display:none; }
+          .nav-toggle { display:none; }
           .app-bottomnav { display:flex; position:fixed; bottom:0; left:0; right:0; background:white; border-top:1px solid ${C.border}; justify-content:space-around; padding:6px 4px; z-index:6; box-shadow:0 -2px 10px rgba(15,30,48,0.06); }
         }
         @media (max-width: 560px) {
@@ -425,9 +429,15 @@ export default function App() {
       `}</style>
       {/* Header */}
       <header style={{ background:C.navy, height:56, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 20px', borderBottom:`2px solid ${C.gold}`, boxShadow:'0 2px 10px rgba(15,30,48,0.12)', position:'relative', zIndex:2 }}>
-        <span className="app-header-title" style={{ fontFamily:'Georgia,serif', fontSize:18, color:'white', fontWeight:'bold', letterSpacing:'-0.3px' }}>
-          📋 RPC Planner
-        </span>
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          {!isStudent && mode==='parent' && (
+            <button className="nav-toggle" onClick={() => setNavCollapsed(c => !c)} aria-label="Toggle menu"
+              style={{ background:'rgba(255,255,255,0.12)', border:'none', color:'white', width:34, height:30, borderRadius:8, cursor:'pointer', fontSize:16, lineHeight:1 }}>☰</button>
+          )}
+          <span className="app-header-title" style={{ fontFamily:'Georgia,serif', fontSize:18, color:'white', fontWeight:'bold', letterSpacing:'-0.3px' }}>
+            📋 RPC Planner
+          </span>
+        </div>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           {!demo && !isStudent && (
             <Btn
@@ -473,7 +483,8 @@ export default function App() {
           </ErrorBoundary>
         </main>
       ) : (
-        <div className="app-shell" style={{ display:'flex', alignItems:'flex-start', maxWidth:1180, margin:'0 auto' }}>
+        <div className="app-shell" style={{ display:'flex', alignItems:'flex-start' }}>
+          {!navCollapsed && (
           <aside className="app-sidebar">
             {NAV_GROUPS.map(([group, items]) => (
               <div key={group} style={{ marginBottom:12 }}>
@@ -484,7 +495,8 @@ export default function App() {
               </div>
             ))}
           </aside>
-          <main className="app-main" style={{ flex:1, minWidth:0, maxWidth:980, padding:'20px 22px 92px' }}>
+          )}
+          <main className="app-main" style={{ flex:1, minWidth:0, maxWidth:1040, padding:'20px 24px 92px' }}>
             {/* key={view}: each tab gets its own error boundary; a crash is escaped by switching tabs. */}
             <ErrorBoundary key={view}>
               <Suspense fallback={<TabFallback />}>
@@ -526,8 +538,17 @@ export default function App() {
       {/* Mobile "More" sheet */}
       {moreOpen && (
         <div onClick={() => setMoreOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(15,30,48,0.35)', zIndex:10, display:'flex', alignItems:'flex-end' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:'white', width:'100%', borderTopLeftRadius:16, borderTopRightRadius:16, padding:'14px 16px 26px', maxHeight:'72vh', overflowY:'auto' }}>
-            <div style={{ width:36, height:4, background:C.border, borderRadius:2, margin:'0 auto 12px' }} />
+          <div onClick={e => e.stopPropagation()}
+            onTouchStart={e => { sheetStartY.current = e.touches[0].clientY; }}
+            onTouchEnd={e => { if (e.changedTouches[0].clientY - (sheetStartY.current ?? 0) > 55) setMoreOpen(false); }}
+            style={{ background:'white', width:'100%', borderTopLeftRadius:16, borderTopRightRadius:16, padding:'10px 16px 26px', maxHeight:'72vh', overflowY:'auto' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+              <span style={{ width:32 }} />
+              <button onClick={() => setMoreOpen(false)} aria-label="Close menu" style={{ background:'none', border:'none', cursor:'pointer', padding:'4px 20px' }}>
+                <span style={{ display:'block', width:40, height:5, background:C.border, borderRadius:3 }} />
+              </button>
+              <button onClick={() => setMoreOpen(false)} aria-label="Close menu" style={{ background:'none', border:'none', cursor:'pointer', fontSize:18, color:C.muted, width:32 }}>✕</button>
+            </div>
             {NAV_GROUPS.map(([group, items]) => (
               <div key={group} style={{ marginBottom:8 }}>
                 <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:C.muted, margin:'6px 4px' }}>{group}</div>
