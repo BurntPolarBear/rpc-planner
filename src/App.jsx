@@ -56,7 +56,6 @@ function Login({ onDemo }) {
   const [code, setCode]     = useState('');
   const [sErr, setSErr]     = useState('');
   const [sBusy, setSBusy]   = useState(false);
-  const [smode, setSmode]   = useState('class'); // class | account
   const [user, setUser]     = useState('');
 
   const send = async (e) => {
@@ -70,17 +69,6 @@ function Login({ onDemo }) {
     });
     if (error) { setStatus('error'); setMsg(error.message); }
     else setStatus('sent');
-  };
-
-  const studentEnter = async (e) => {
-    e.preventDefault();
-    const expected = import.meta.env.VITE_STUDENT_CODE;
-    if (!expected) { setSErr('Student sign-in is not set up yet. Ask a parent.'); return; }
-    if (code.trim() !== String(expected)) { setSErr("That code does not match. Try again."); return; }
-    setSBusy(true); setSErr('');
-    const { error } = await supabase.auth.signInAnonymously();
-    if (error) { setSBusy(false); setSErr('Could not sign in. Ask a parent for help.'); }
-    // On success, onAuthStateChange establishes the session and the app loads.
   };
 
   const accountEnter = async (e) => {
@@ -142,52 +130,26 @@ function Login({ onDemo }) {
             </form>
           )
         ) : (
-          smode === 'account' ? (
-            <form onSubmit={accountEnter}>
-              <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', color:C.muted, marginBottom:6 }}>Username</label>
-              <input
-                type="text" required autoFocus value={user}
-                onChange={e => setUser(e.target.value)}
-                placeholder="your username"
-                style={{ width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'11px 13px', fontSize:15, fontFamily:'inherit', boxSizing:'border-box', marginBottom:14 }}
-              />
-              <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', color:C.muted, marginBottom:6 }}>Passcode</label>
-              <input
-                type="password" required value={code}
-                onChange={e => setCode(e.target.value)}
-                placeholder="your passcode"
-                style={{ width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'11px 13px', fontSize:15, fontFamily:'inherit', boxSizing:'border-box', marginBottom:14 }}
-              />
-              <button type="submit" disabled={sBusy} style={{ width:'100%', background:C.navy, color:'white', border:'none', borderRadius:8, padding:'12px', fontSize:15, fontWeight:700, cursor: sBusy ? 'default' : 'pointer', opacity: sBusy ? 0.7 : 1 }}>
-                {sBusy ? 'Signing in…' : 'Start school'}
-              </button>
-              {sErr && <div style={{ marginTop:12, color:C.red, fontSize:13, textAlign:'center' }}>{sErr}</div>}
-              <div style={{ textAlign:'center', marginTop:14 }}>
-                <button type="button" onClick={() => { setSmode('class'); setSErr(''); }} style={{ background:'none', border:'none', color:C.gold, fontSize:12.5, fontWeight:700, cursor:'pointer' }}>
-                  Use the class code instead →
-                </button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={studentEnter}>
-              <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', color:C.muted, marginBottom:6 }}>Class passcode</label>
-              <input
-                type="password" required autoFocus value={code}
-                onChange={e => setCode(e.target.value)}
-                placeholder="Enter your class code"
-                style={{ width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'11px 13px', fontSize:15, fontFamily:'inherit', boxSizing:'border-box', marginBottom:14 }}
-              />
-              <button type="submit" disabled={sBusy} style={{ width:'100%', background:C.navy, color:'white', border:'none', borderRadius:8, padding:'12px', fontSize:15, fontWeight:700, cursor: sBusy ? 'default' : 'pointer', opacity: sBusy ? 0.7 : 1 }}>
-                {sBusy ? 'Signing in…' : 'Start school'}
-              </button>
-              {sErr && <div style={{ marginTop:12, color:C.red, fontSize:13, textAlign:'center' }}>{sErr}</div>}
-              <div style={{ textAlign:'center', marginTop:14 }}>
-                <button type="button" onClick={() => { setSmode('account'); setSErr(''); }} style={{ background:'none', border:'none', color:C.gold, fontSize:12.5, fontWeight:700, cursor:'pointer' }}>
-                  Sign in with your name →
-                </button>
-              </div>
-            </form>
-          )
+          <form onSubmit={accountEnter}>
+            <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', color:C.muted, marginBottom:6 }}>Username</label>
+            <input
+              type="text" required autoFocus value={user}
+              onChange={e => setUser(e.target.value)}
+              placeholder="your username"
+              style={{ width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'11px 13px', fontSize:15, fontFamily:'inherit', boxSizing:'border-box', marginBottom:14 }}
+            />
+            <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', color:C.muted, marginBottom:6 }}>Passcode</label>
+            <input
+              type="password" required value={code}
+              onChange={e => setCode(e.target.value)}
+              placeholder="your passcode"
+              style={{ width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'11px 13px', fontSize:15, fontFamily:'inherit', boxSizing:'border-box', marginBottom:14 }}
+            />
+            <button type="submit" disabled={sBusy} style={{ width:'100%', background:C.navy, color:'white', border:'none', borderRadius:8, padding:'12px', fontSize:15, fontWeight:700, cursor: sBusy ? 'default' : 'pointer', opacity: sBusy ? 0.7 : 1 }}>
+              {sBusy ? 'Signing in…' : 'Start school'}
+            </button>
+            {sErr && <div style={{ marginTop:12, color:C.red, fontSize:13, textAlign:'center' }}>{sErr}</div>}
+          </form>
         )}
 
         <div style={{ textAlign:'center', marginTop:20, paddingTop:16, borderTop:`1px solid ${C.border}` }}>
