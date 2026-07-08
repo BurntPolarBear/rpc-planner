@@ -400,8 +400,14 @@ export default function App() {
         /* Subtle tactility on buttons */
         button:not(:disabled):hover { filter: brightness(1.03); }
         button:not(:disabled):active { transform: translateY(1px); }
-        .app-sidebar { width:186px; flex-shrink:0; background:white; border-right:1px solid ${C.border}; padding:10px 10px 24px; align-self:stretch; position:sticky; top:0; min-height:calc(100vh - 58px); }
-        .app-navitem { display:flex; align-items:center; gap:8px; width:100%; text-align:left; background:none; border:none; padding:8px 10px; border-radius:8px; font-size:13px; color:#41505f; cursor:pointer; margin-bottom:2px; }
+        .app-sidebar { flex-shrink:0; width:186px; align-self:flex-start; position:sticky; top:0; height:calc(100vh - 58px); }
+        .rail-panel { width:186px; height:100%; background:white; border-right:1px solid ${C.border}; padding:10px 10px 24px; box-sizing:border-box; overflow-y:auto; }
+        .app-sidebar.rail { width:60px; }
+        .app-sidebar.rail .rail-panel { position:absolute; top:0; left:0; width:60px; overflow:hidden; white-space:nowrap; transition:width .18s ease; z-index:5; }
+        .app-sidebar.rail:hover .rail-panel { width:206px; box-shadow:2px 0 14px rgba(15,30,48,0.12); }
+        .app-sidebar.rail:not(:hover) .nav-group { opacity:0; }
+        .nav-ico { display:inline-block; width:22px; text-align:center; flex-shrink:0; }
+        .app-navitem { display:flex; align-items:center; gap:8px; width:100%; text-align:left; background:none; border:none; padding:8px 10px; border-radius:8px; font-size:13px; color:#41505f; cursor:pointer; margin-bottom:2px; white-space:nowrap; }
         .app-navitem:hover { background:#F5F7F9; }
         .app-navitem[data-on="true"] { background:#FBF5E7; color:${C.gold}; font-weight:700; box-shadow:inset 3px 0 0 ${C.gold}; }
         .app-bottomnav { display:none; }
@@ -490,18 +496,23 @@ export default function App() {
         </main>
       ) : (
         <div className="app-shell" style={{ display:'flex', alignItems:'flex-start' }}>
-          {!navCollapsed && (
-          <aside className="app-sidebar">
-            {NAV_GROUPS.map(([group, items]) => (
-              <div key={group} style={{ marginBottom:12 }}>
-                <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:C.muted, margin:'10px 10px 4px' }}>{group}</div>
-                {items.map(([id, label]) => (
-                  <button key={id} className="app-navitem" data-on={view===id} onClick={() => setView(id)}>{label}</button>
-                ))}
-              </div>
-            ))}
+          <aside className={navCollapsed ? 'app-sidebar rail' : 'app-sidebar'}>
+            <div className="rail-panel">
+              {NAV_GROUPS.map(([group, items]) => (
+                <div key={group} style={{ marginBottom:12 }}>
+                  <div className="nav-group" style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:C.muted, margin:'10px 10px 4px' }}>{group}</div>
+                  {items.map(([id, label]) => {
+                    const [ico, ...rest] = label.split(' ');
+                    return (
+                      <button key={id} className="app-navitem" data-on={view===id} onClick={() => setView(id)} title={rest.join(' ')}>
+                        <span className="nav-ico">{ico}</span><span>{rest.join(' ')}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           </aside>
-          )}
           <main className="app-main" style={{ flex:1, minWidth:0, padding:'20px 24px 92px' }}>
             <div style={{ maxWidth:1000, margin:'0 auto' }}>
             {/* key={view}: each tab gets its own error boundary; a crash is escaped by switching tabs. */}
@@ -547,8 +558,6 @@ export default function App() {
       {moreOpen && (
         <div onClick={closeMore} style={{ position:'fixed', inset:0, background:'rgba(15,30,48,0.35)', zIndex:10, display:'flex', alignItems:'flex-end', animation: sheetClosing ? 'fadeOut .26s ease forwards' : 'fadeIn .2s ease' }}>
           <div onClick={e => e.stopPropagation()}
-            onTouchStart={e => { sheetStartY.current = e.touches[0].clientY; }}
-            onTouchEnd={e => { if (e.changedTouches[0].clientY - (sheetStartY.current ?? 0) > 55) closeMore(); }}
             style={{ background:'white', width:'100%', borderTopLeftRadius:16, borderTopRightRadius:16, padding:'10px 16px 26px', maxHeight:'72vh', overflowY:'auto', animation: sheetClosing ? 'sheetDown .28s ease forwards' : 'sheetUp .28s cubic-bezier(.22,1,.36,1)' }}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
               <span style={{ width:32 }} />
