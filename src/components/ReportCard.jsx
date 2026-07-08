@@ -45,18 +45,18 @@ export function ReportCard({ student, db, onBack, kidView = false }) {
 
       {/* Toolbar */}
       <div className="no-print" style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16, flexWrap:'wrap' }}>
-        {onBack && <Btn onClick={onBack} style={{ background:'#E8EEF4', color:C.navy, padding:'6px 12px', fontSize:12 }}>← Back</Btn>}
+        {onBack && <Btn onClick={onBack} style={{ background:'#E8EEF4', color:C.navy, padding:'8px 14px', fontSize:13 }}>← Back</Btn>}
         <div style={{ flex:1 }} />
         {years.length > 1 && (
           <select value={sy} onChange={e=>setSy(e.target.value)} style={{ ...inp, width:'auto', fontSize:13 }}>
             {years.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         )}
-        <Btn onClick={()=>window.print()} style={{ background:C.navy, color:'white', fontSize:12 }}>🖨 Print / PDF</Btn>
+        <Btn onClick={()=>window.print()} style={{ background:C.navy, color:'white', padding:'8px 14px', fontSize:13 }}>🖨 Print / PDF</Btn>
       </div>
 
       {/* Hero */}
-      <div className="rc-card" style={{ ...card, marginBottom:16, textAlign:'center', background:`linear-gradient(160deg, ${C.navy} 0%, ${C.navyD} 100%)`, color:'white', padding:'26px 20px', border:'none' }}>
+      <div className="rc-card" style={{ ...card, borderRadius:16, marginBottom:16, textAlign:'center', background:C.navy, color:'white', padding:'28px 22px', border:'none' }}>
         <div style={{ fontSize:12, fontWeight:800, letterSpacing:'0.14em', textTransform:'uppercase', color:C.goldL, marginBottom:4 }}>Report Card</div>
         <div style={{ fontFamily:'Georgia,serif', fontSize:26, fontWeight:'bold' }}>{student.emoji} {student.name}</div>
         <div style={{ fontSize:13, color:'#B8C6D9', marginBottom:18 }}>{rc.gg?.name} · {sy} school year</div>
@@ -105,9 +105,9 @@ export function ReportCard({ student, db, onBack, kidView = false }) {
         const scores = s.grades.map(g => g.score ?? 0);
         const maxItem = 100;
         return (
-          <div key={s.subj.id} className="rc-card" style={{ ...card, marginBottom:12 }}>
+          <div key={s.subj.id} className="rc-card" style={{ ...card, borderRadius:16, marginBottom:14 }}>
             <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:10, flexWrap:'wrap' }}>
-              <span style={{ fontSize:24 }}>{s.subj.icon}</span>
+              <span style={{ width:44, height:44, borderRadius:12, background:s.subj.color, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>{s.subj.icon}</span>
               <div style={{ flex:1, minWidth:120 }}>
                 <div style={{ fontWeight:700, fontSize:16, color:C.navy }}>{s.subj.name}</div>
                 <div style={{ fontSize:12, color:C.muted }}>
