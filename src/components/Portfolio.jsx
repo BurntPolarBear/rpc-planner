@@ -67,6 +67,9 @@ export function PortfolioView({ db }) {
           .pf-student { break-before: page; }
           .pf-student:first-child { break-before: auto; }
           .pf-section, .pf-cover, .pf-wsample, .pf-row { break-inside: avoid; }
+          .pf-section > div:first-child { break-after: avoid; }
+          .pf-doc p, .pf-doc td, .pf-doc div { orphans: 2; widows: 2; }
+          .pf-doc { border: none !important; padding: 0 !important; }
           .pf-doc * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
       `}</style>
@@ -184,21 +187,28 @@ function StudentPortfolio({ db, student, sy, sections, fullText }) {
   return (
     <div className="pf-student">
       {/* Cover */}
-      <div className="pf-cover" style={{ borderTop:`4px solid ${C.gold}`, paddingTop:22, marginBottom:26 }}>
-        <div style={{ fontSize:12, fontWeight:800, letterSpacing:'0.18em', textTransform:'uppercase', color:C.gold, marginBottom:6 }}>
+      <div className="pf-cover" style={{ textAlign:'center', paddingTop:6, marginBottom:32 }}>
+        <div style={{ width:64, height:64, borderRadius:'50%', background:C.navy, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'Georgia,serif', fontSize:28, fontWeight:'bold', margin:'0 auto 14px', border:`3px solid ${C.gold}` }}>
+          {(student.name || '?').charAt(0).toUpperCase()}
+        </div>
+        <div style={{ fontSize:11.5, fontWeight:800, letterSpacing:'0.22em', textTransform:'uppercase', color:C.gold, marginBottom:8 }}>
           Academic Portfolio
         </div>
-        <div style={{ fontFamily:'Georgia,serif', fontSize:30, fontWeight:'bold', color:C.navy, lineHeight:1.15 }}>
-          {student.emoji} {student.name}
+        <div style={{ fontFamily:'Georgia,serif', fontSize:32, fontWeight:'bold', color:C.navy, lineHeight:1.1 }}>
+          {student.name}
         </div>
-        <div style={{ fontSize:15, color:'#334155', marginTop:6 }}>
+        <div style={{ fontSize:15, color:'#334155', marginTop:8 }}>
           {gg?.name}{student.family ? ` · ${student.family}` : ''}
         </div>
-        <div style={{ fontSize:14, color:C.navy, fontWeight:700, marginTop:2 }}>
-          {sy} School Year <span style={{ color:C.muted, fontWeight:400 }}>· {syRangeLabel(sy)}</span>
+        <div style={{ fontSize:14.5, color:C.navy, fontWeight:700, marginTop:3 }}>{sy} School Year</div>
+        <div style={{ fontSize:12.5, color:C.muted, marginTop:2 }}>{syRangeLabel(sy)}</div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:12, margin:'18px auto 0', maxWidth:300 }}>
+          <span style={{ flex:1, height:1, background:C.border }} />
+          <span style={{ width:6, height:6, borderRadius:'50%', background:C.gold, flexShrink:0 }} />
+          <span style={{ flex:1, height:1, background:C.border }} />
         </div>
-        <div style={{ fontSize:12, color:C.muted, marginTop:14, borderTop:`1px solid ${C.border}`, paddingTop:10 }}>
-          Prepared {fmtLongDate()} · Ron Paul Curriculum
+        <div style={{ fontSize:12, color:C.muted, marginTop:12 }}>
+          Prepared for year-end evaluation · {fmtLongDate()} · Ron Paul Curriculum
         </div>
       </div>
 
