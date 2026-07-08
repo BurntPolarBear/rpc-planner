@@ -21,3 +21,6 @@ npm-debug.log*
 Thumbs.db
 .idea/
 .vscode/
+
+# temp test bundle
+.rectest.mjs

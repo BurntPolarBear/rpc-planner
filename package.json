@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:grades": "node scripts/test-grades.mjs"
+    "test:grades": "node scripts/test-grades.mjs",
+    "test:records": "esbuild scripts/test-records.mjs --bundle --platform=node --format=esm --log-level=error --outfile=.rectest.mjs && node .rectest.mjs"
   },
   "dependencies": {
     "react": "^18.2.0",

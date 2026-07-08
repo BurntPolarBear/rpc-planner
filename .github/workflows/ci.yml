@@ -27,5 +27,8 @@ jobs:
       - name: Run grade-math tests
         run: npm run test:grades
 
+      - name: Run records-store tests
+        run: npm run test:records
+
       - name: Build the app
         run: npm run build

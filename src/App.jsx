@@ -6,6 +6,7 @@ import { INIT } from './utils/constants';
 import { TODAY, getMon } from './utils/dates';
 import { Btn, C } from './utils/theme';
 import { supabase } from './utils/supabaseClient';
+import { assembleDb, loadRecords, diffAndSync } from './utils/recordsStore';
 
 // Parent-only tabs are code-split so students never download them and each tab's
 // JS loads on first visit instead of up front. React.lazy expects a default
@@ -262,30 +263,29 @@ export default function App() {
 
   const loadData = useCallback(async () => {
     if (!userId) return;
-    // Student accounts get only their own slice, via a locked-down DB function.
+    // Student accounts get only their own rows, via a locked-down DB function.
     if (isStudent) {
-      const { data, error } = await supabase.rpc('student_today');
-      if (!error && data && Array.isArray(data.students) && data.students.length > 0) {
-        setDb(data); setAccess('ok');
-        setStu(session?.user?.user_metadata?.student_id || null);
-      } else {
-        setAccess('denied');
-      }
+      const { data, error } = await supabase.rpc('student_rows');
+      if (!error && Array.isArray(data)) {
+        const sdb = assembleDb(data);
+        if (sdb.students.length > 0) {
+          setDb(sdb); setAccess('ok');
+          setStu(session?.user?.user_metadata?.student_id || null);
+        } else { setAccess('denied'); }
+      } else { setAccess('denied'); }
       return;
     }
+    // Parents assemble the full db from the records table.
     try {
-      const { data } = await supabase
-        .from('shared_data')
-        .select('content')
-        .eq('id', 1)
-        .maybeSingle();
-      if (data?.content?.gradeGroups) {
-        setDb(data.content); setAccess('ok');
+      const loaded = await loadRecords(supabase);
+      if (loaded.gradeGroups.length > 0) {
+        setDb(loaded); setAccess('ok');
       } else {
-        const { error: seedErr } = await supabase
-          .from('shared_data').upsert({ id: 1, content: INIT });
-        if (seedErr) setAccess('denied');
-        else { setDb(INIT); setAccess('ok'); }
+        // Empty account — seed the starter template (only an approved member can).
+        try {
+          await diffAndSync(supabase, assembleDb([]), INIT);
+          setDb(INIT); setAccess('ok');
+        } catch { setAccess('denied'); }
       }
     } catch {
       setAccess('denied');
@@ -309,12 +309,13 @@ export default function App() {
     let channel = null;
     if (!isStudent) {
       channel = supabase
-        .channel('shared_data_changes')
+        .channel('records_changes')
         .on('postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'shared_data', filter: 'id=eq.1' },
-          (payload) => {
+          { event: '*', schema: 'public', table: 'records' },
+          () => {
+            // Ignore echoes of our own in-flight writes; otherwise reload.
             if (pendingWrites.current > 0) return;
-            if (payload.new?.content?.gradeGroups) setDb(payload.new.content);
+            loadData();
           }
         )
         .subscribe();
@@ -330,13 +331,9 @@ export default function App() {
     const next = JSON.parse(JSON.stringify(prev));
     fn(next);
     pendingWrites.current += 1;
-    supabase
-      .from('shared_data')
-      .upsert({ id: 1, content: next, updated_at: new Date().toISOString() })
-      .then(({ error }) => {
-        if (error) console.error(error);
-        pendingWrites.current = Math.max(0, pendingWrites.current - 1);
-      });
+    diffAndSync(supabase, prev, next)
+      .then(() => { pendingWrites.current = Math.max(0, pendingWrites.current - 1); })
+      .catch(err => { console.error(err); pendingWrites.current = Math.max(0, pendingWrites.current - 1); });
     return next;
   });
 
