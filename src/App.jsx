@@ -24,6 +24,16 @@ const HoursView    = lazy(() => import('./components/Hours').then(m => ({ defaul
 const ExportView   = lazy(() => import('./components/Export').then(m => ({ default: m.ExportView })));
 const Setup        = lazy(() => import('./components/Setup').then(m => ({ default: m.Setup })));
 
+// Parent navigation, grouped for the sidebar. Mobile shows the primary four plus a
+// "More" sheet with the rest.
+const NAV_GROUPS = [
+  ['Teach',   [['today','📊 Today'], ['week','🗓 Week'], ['plan','📋 Plan'], ['review','✅ Review']]],
+  ['Assess',  [['writing','✍️ Writing'], ['grades','🎓 Grades'], ['hours','⏱ Hours']]],
+  ['Records', [['progress','📈 Progress'], ['records','📄 Records'], ['export','📤 Export']]],
+  ['Manage',  [['setup','⚙️ Setup']]],
+];
+const MOBILE_PRIMARY = [['today','📊 Today'], ['plan','📋 Plan'], ['review','✅ Review'], ['grades','🎓 Grades']];
+
 // Shown briefly while a code-split tab's chunk downloads.
 function TabFallback() {
   return (
@@ -215,6 +225,7 @@ export default function App() {
   const [gradePrefill, setGradePrefill] = useState(null);
   const [access, setAccess] = useState('checking'); // checking | ok | denied
   const [demo, setDemo]     = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [demoDb, setDemoDb] = useState(null);
 
   // Auth bootstrap: read any existing session, then listen for sign-in/out
@@ -358,10 +369,6 @@ export default function App() {
     return <Splash>Loading demo…</Splash>;
   }
 
-  const navItems = mode === 'parent'
-    ? [['today','📊 Today'], ['week','🗓 Week'], ['plan','📋 Plan'], ['review','✅ Review'], ['writing','✍️ Writing'], ['grades','🎓 Grades'], ['progress','📈 Progress'], ['records','📄 Records'], ['hours','⏱ Hours'], ['export','📤 Export'], ['setup','⚙️ Setup']]
-    : [['today','📅 Today']];
-
   const goToPlan = (ggId) => { setPGG(ggId); setView('plan'); };
   // Review → Grades: carry the submission's student/subject/work into the composer.
   const goToGrade = (payload) => { setGradePrefill({ ...payload, token: Date.now() }); setView('grades'); };
@@ -389,13 +396,24 @@ export default function App() {
         /* Subtle tactility on buttons */
         button:not(:disabled):hover { filter: brightness(1.03); }
         button:not(:disabled):active { transform: translateY(1px); }
+        .app-sidebar { width:186px; flex-shrink:0; background:white; border-right:1px solid ${C.border}; padding:10px 10px 24px; align-self:stretch; position:sticky; top:0; min-height:calc(100vh - 58px); }
+        .app-navitem { display:flex; align-items:center; gap:8px; width:100%; text-align:left; background:none; border:none; padding:8px 10px; border-radius:8px; font-size:13px; color:#41505f; cursor:pointer; margin-bottom:2px; }
+        .app-navitem:hover { background:#F5F7F9; }
+        .app-navitem[data-on="true"] { background:#FBF5E7; color:${C.gold}; font-weight:700; box-shadow:inset 3px 0 0 ${C.gold}; }
+        .app-bottomnav { display:none; }
+        .app-bn { display:flex; flex-direction:column; align-items:center; gap:2px; background:none; border:none; cursor:pointer; font-size:10px; color:${C.muted}; padding:2px 6px; }
+        .app-bn[data-on="true"] { color:${C.gold}; font-weight:700; }
+        @media (max-width: 900px) {
+          .app-sidebar { display:none; }
+          .app-bottomnav { display:flex; position:fixed; bottom:0; left:0; right:0; background:white; border-top:1px solid ${C.border}; justify-content:space-around; padding:6px 4px; z-index:6; box-shadow:0 -2px 10px rgba(15,30,48,0.06); }
+        }
         @media (max-width: 560px) {
           .lesson-editor-grid { grid-template-columns: 1fr !important; }
-          .app-main { padding: 14px 12px !important; }
+          .app-main { padding: 14px 12px 92px !important; }
           .app-header-title { font-size: 16px !important; }
         }
         @media (max-width: 400px) {
-          .app-main { padding: 12px 9px !important; }
+          .app-main { padding: 12px 9px 92px !important; }
         }
         /* Respect users who prefer less motion */
         @media (prefers-reduced-motion: reduce) {
@@ -445,40 +463,89 @@ export default function App() {
         />
       )}
 
-      {/* Nav */}
-      <nav style={{ background:'white', borderBottom:`1px solid ${C.border}`, display:'flex', overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
-        {navItems.map(([id, label]) => (
-          <button key={id} onClick={() => setView(id)} style={{
-            background:'none', border:'none', padding:'11px 12px', cursor:'pointer',
-            fontSize:12, fontWeight: view===id ? 700 : 500,
-            color: view===id ? C.gold : C.muted,
-            borderBottom:`3px solid ${view===id ? C.gold : 'transparent'}`,
-            whiteSpace:'nowrap', flexShrink:0,
-          }}>{label}</button>
-        ))}
-      </nav>
+      {(isStudent || mode === 'student') ? (
+        /* Student day — single view, no chrome */
+        <main className="app-main" style={{ maxWidth:960, margin:'0 auto', padding:'20px 16px 40px' }}>
+          <ErrorBoundary key={view}>
+            <Suspense fallback={<TabFallback />}>
+              <StudentToday db={activeDb} stuId={stuId} setStu={setStu} mut={activeMut} />
+            </Suspense>
+          </ErrorBoundary>
+        </main>
+      ) : (
+        <div className="app-shell" style={{ display:'flex', alignItems:'flex-start', maxWidth:1180, margin:'0 auto' }}>
+          <aside className="app-sidebar">
+            {NAV_GROUPS.map(([group, items]) => (
+              <div key={group} style={{ marginBottom:12 }}>
+                <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:C.muted, margin:'10px 10px 4px' }}>{group}</div>
+                {items.map(([id, label]) => (
+                  <button key={id} className="app-navitem" data-on={view===id} onClick={() => setView(id)}>{label}</button>
+                ))}
+              </div>
+            ))}
+          </aside>
+          <main className="app-main" style={{ flex:1, minWidth:0, maxWidth:980, padding:'20px 22px 92px' }}>
+            {/* key={view}: each tab gets its own error boundary; a crash is escaped by switching tabs. */}
+            <ErrorBoundary key={view}>
+              <Suspense fallback={<TabFallback />}>
+                {view==='today'    && <Overview db={activeDb} onReview={() => setView('review')} />}
+                {view==='week'     && <WeekOverview db={activeDb} weekMon={weekMon} setWk={setWk} onGoToPlan={goToPlan} />}
+                {view==='plan'     && <Planner db={activeDb} mut={activeMut} weekMon={weekMon} setWk={setWk} activeGG={planGG} setActiveGG={setPGG} />}
+                {view==='review'   && <Review db={activeDb} mut={activeMut} onGradeThis={goToGrade} />}
+                {view==='writing'  && <WritingView db={activeDb} mut={activeMut} />}
+                {view==='grades'   && <GradesView db={activeDb} mut={activeMut} prefill={gradePrefill} onPrefillConsumed={()=>setGradePrefill(null)} />}
+                {view==='progress' && <ProgressView db={activeDb} />}
+                {view==='records'  && <RecordsView db={activeDb} />}
+                {view==='hours'    && <HoursView db={activeDb} mut={activeMut} />}
+                {view==='export'   && <ExportView db={activeDb} weekMon={weekMon} setWk={setWk} />}
+                {view==='setup'    && <Setup db={activeDb} mut={activeMut} />}
+              </Suspense>
+            </ErrorBoundary>
+          </main>
+        </div>
+      )}
 
-      {/* Main */}
-      <main className="app-main" style={{ maxWidth:960, margin:'0 auto', padding:'20px 16px' }}>
-        {/* key={view}: gives each tab its own boundary, so a section that throws
-            can be escaped just by switching tabs — the new view remounts clean. */}
-        <ErrorBoundary key={view}>
-          <Suspense fallback={<TabFallback />}>
-            {view==='today' && mode==='student' && <StudentToday db={activeDb} stuId={stuId} setStu={setStu} mut={activeMut} />}
-            {view==='today' && mode==='parent'  && <Overview db={activeDb} onReview={() => setView('review')} />}
-            {view==='week'  && mode==='parent'  && <WeekOverview db={activeDb} weekMon={weekMon} setWk={setWk} onGoToPlan={goToPlan} />}
-            {view==='plan'  && mode==='parent'  && <Planner db={activeDb} mut={activeMut} weekMon={weekMon} setWk={setWk} activeGG={planGG} setActiveGG={setPGG} />}
-            {view==='review'&& mode==='parent'  && <Review db={activeDb} mut={activeMut} onGradeThis={goToGrade} />}
-            {view==='writing'&& mode==='parent'  && <WritingView db={activeDb} mut={activeMut} />}
-            {view==='grades'&& mode==='parent'  && <GradesView db={activeDb} mut={activeMut} prefill={gradePrefill} onPrefillConsumed={()=>setGradePrefill(null)} />}
-            {view==='progress'&& mode==='parent'  && <ProgressView db={activeDb} />}
-            {view==='records'&& mode==='parent'  && <RecordsView db={activeDb} />}
-            {view==='hours'  && mode==='parent'  && <HoursView db={activeDb} mut={activeMut} />}
-            {view==='export'&& mode==='parent'  && <ExportView db={activeDb} weekMon={weekMon} setWk={setWk} />}
-            {view==='setup' && <Setup db={activeDb} mut={activeMut} />}
-          </Suspense>
-        </ErrorBoundary>
-      </main>
+      {/* Mobile bottom nav (parent mode) */}
+      {!isStudent && mode === 'parent' && (
+        <nav className="app-bottomnav">
+          {MOBILE_PRIMARY.map(([id, label]) => {
+            const [icon, ...rest] = label.split(' ');
+            return (
+              <button key={id} className="app-bn" data-on={view===id} onClick={() => setView(id)}>
+                <span style={{ fontSize:19, lineHeight:1 }}>{icon}</span>
+                <span>{rest.join(' ')}</span>
+              </button>
+            );
+          })}
+          <button className="app-bn" data-on={moreOpen} onClick={() => setMoreOpen(true)}>
+            <span style={{ fontSize:19, lineHeight:1 }}>⋯</span><span>More</span>
+          </button>
+        </nav>
+      )}
+
+      {/* Mobile "More" sheet */}
+      {moreOpen && (
+        <div onClick={() => setMoreOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(15,30,48,0.35)', zIndex:10, display:'flex', alignItems:'flex-end' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'white', width:'100%', borderTopLeftRadius:16, borderTopRightRadius:16, padding:'14px 16px 26px', maxHeight:'72vh', overflowY:'auto' }}>
+            <div style={{ width:36, height:4, background:C.border, borderRadius:2, margin:'0 auto 12px' }} />
+            {NAV_GROUPS.map(([group, items]) => (
+              <div key={group} style={{ marginBottom:8 }}>
+                <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:C.muted, margin:'6px 4px' }}>{group}</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                  {items.map(([id, label]) => (
+                    <button key={id} onClick={() => { setView(id); setMoreOpen(false); }} style={{
+                      textAlign:'left', background: view===id ? '#FBF5E7' : '#F7F9FB',
+                      border:`1px solid ${view===id ? C.gold : C.border}`, color: view===id ? C.gold : '#40505f',
+                      fontWeight: view===id ? 700 : 500, borderRadius:10, padding:'11px 12px', fontSize:13, cursor:'pointer' }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
