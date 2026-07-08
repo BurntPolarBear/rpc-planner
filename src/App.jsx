@@ -406,6 +406,8 @@ export default function App() {
         .app-sidebar.rail .rail-panel { position:absolute; top:0; left:0; width:60px; overflow:hidden; white-space:nowrap; transition:width .18s ease; z-index:5; }
         .app-sidebar.rail:hover .rail-panel { width:206px; box-shadow:2px 0 14px rgba(15,30,48,0.12); }
         .app-sidebar.rail:not(:hover) .nav-group { opacity:0; }
+        .app-sidebar.rail:not(:hover) .nav-label { display:none; }
+        .app-sidebar.rail:not(:hover) .app-navitem { justify-content:center; }
         .nav-ico { display:inline-block; width:22px; text-align:center; flex-shrink:0; }
         .app-navitem { display:flex; align-items:center; gap:8px; width:100%; text-align:left; background:none; border:none; padding:8px 10px; border-radius:8px; font-size:13px; color:#41505f; cursor:pointer; margin-bottom:2px; white-space:nowrap; }
         .app-navitem:hover { background:#F5F7F9; }
@@ -505,7 +507,7 @@ export default function App() {
                     const [ico, ...rest] = label.split(' ');
                     return (
                       <button key={id} className="app-navitem" data-on={view===id} onClick={() => setView(id)} title={rest.join(' ')}>
-                        <span className="nav-ico">{ico}</span><span>{rest.join(' ')}</span>
+                        <span className="nav-ico">{ico}</span><span className="nav-label">{rest.join(' ')}</span>
                       </button>
                     );
                   })}
