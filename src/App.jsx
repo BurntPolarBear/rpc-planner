@@ -19,6 +19,7 @@ const WritingView  = lazy(() => import('./components/Writing').then(m => ({ defa
 const GradesView   = lazy(() => import('./components/Grades').then(m => ({ default: m.GradesView })));
 const ProgressView = lazy(() => import('./components/Progress').then(m => ({ default: m.ProgressView })));
 const RecordsView  = lazy(() => import('./components/Records').then(m => ({ default: m.RecordsView })));
+const HoursView    = lazy(() => import('./components/Hours').then(m => ({ default: m.HoursView })));
 const ExportView   = lazy(() => import('./components/Export').then(m => ({ default: m.ExportView })));
 const Setup        = lazy(() => import('./components/Setup').then(m => ({ default: m.Setup })));
 
@@ -361,7 +362,7 @@ export default function App() {
   }
 
   const navItems = mode === 'parent'
-    ? [['today','📊 Today'], ['week','🗓 Week'], ['plan','📋 Plan'], ['review','✅ Review'], ['writing','✍️ Writing'], ['grades','🎓 Grades'], ['progress','📈 Progress'], ['records','📄 Records'], ['export','📤 Export'], ['setup','⚙️ Setup']]
+    ? [['today','📊 Today'], ['week','🗓 Week'], ['plan','📋 Plan'], ['review','✅ Review'], ['writing','✍️ Writing'], ['grades','🎓 Grades'], ['progress','📈 Progress'], ['records','📄 Records'], ['hours','⏱ Hours'], ['export','📤 Export'], ['setup','⚙️ Setup']]
     : [['today','📅 Today']];
 
   const goToPlan = (ggId) => { setPGG(ggId); setView('plan'); };
@@ -475,6 +476,7 @@ export default function App() {
             {view==='grades'&& mode==='parent'  && <GradesView db={activeDb} mut={activeMut} prefill={gradePrefill} onPrefillConsumed={()=>setGradePrefill(null)} />}
             {view==='progress'&& mode==='parent'  && <ProgressView db={activeDb} />}
             {view==='records'&& mode==='parent'  && <RecordsView db={activeDb} />}
+            {view==='hours'  && mode==='parent'  && <HoursView db={activeDb} mut={activeMut} />}
             {view==='export'&& mode==='parent'  && <ExportView db={activeDb} weekMon={weekMon} setWk={setWk} />}
             {view==='setup' && <Setup db={activeDb} mut={activeMut} />}
           </Suspense>

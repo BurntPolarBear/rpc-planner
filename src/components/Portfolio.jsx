@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { schoolYearOf, computeReportCard, gradeColor, BENCH } from '../utils/grades';
 import { C } from '../utils/theme';
+import { studentHours, subjectInfo, fmtHours } from '../utils/hours';
 
 // ─── FULL-YEAR PORTFOLIO ──────────────────────────────────────────────────────
 // A single consolidated year-end document — report card, course progress,
@@ -17,6 +18,7 @@ const PF_SECTIONS = [
   ['report',   '🎓 Report Card & Grades'],
   ['progress', '📈 Course Progress'],
   ['work',     '📅 Attendance & Work'],
+  ['hours',    '⏱ Logged Hours'],
   ['writing',  '✍️ Writing Portfolio'],
 ];
 
@@ -33,7 +35,7 @@ const syRangeLabel = (sy) => {
 export function PortfolioView({ db }) {
   const [stuId, setStuId]   = useState('all');
   const [sy, setSy]         = useState(null);            // null → resolved to newest available below
-  const [sections, setSecs] = useState(() => ({ report: true, progress: true, work: true, writing: true }));
+  const [sections, setSecs] = useState(() => ({ report: true, progress: true, work: true, hours: true, writing: true }));
   const [fullText, setFullText] = useState(true);
 
   // Every school year that appears anywhere in the data (grades, writing, or work),
@@ -43,6 +45,7 @@ export function PortfolioView({ db }) {
     (db.grades || []).forEach(g => set.add(g.schoolYear || schoolYearOf(g.date)));
     (db.writingSamples || []).forEach(w => set.add(schoolYearOf(w.date)));
     (db.answers || []).forEach(a => set.add(schoolYearOf(a.date)));
+    (db.hourLogs || []).forEach(h => set.add(schoolYearOf(h.date)));
     set.add(schoolYearOf(new Date().toISOString().slice(0, 10)));
     return Array.from(set).sort().reverse();
   }, [db]);
@@ -304,6 +307,37 @@ function StudentPortfolio({ db, student, sy, sections, fullText }) {
               <Note>A "school day" is any date with at least one approved lesson. Counts cover the full {sy} school year (August through July).</Note>
             </>
           )}
+        </Section>
+      )}
+
+      {/* Logged instruction hours */}
+      {sections.hours && (
+        <Section title="Logged Instruction Hours">
+          {(() => {
+            const hrs = studentHours(db, student.id, sy);
+            const subjIds = Object.keys(hrs.bySubject).sort((a, b) => hrs.bySubject[b] - hrs.bySubject[a]);
+            if (subjIds.length === 0) return <Empty>No hours were logged for this school year.</Empty>;
+            return (
+              <>
+                <div style={{ display:'flex', gap:22, flexWrap:'wrap', marginBottom:14 }}>
+                  <Stat big value={fmtHours(hrs.totalHours)} label="Total hours logged" />
+                  <Stat big value={hrs.days} label={`Day${hrs.days!==1?'s':''} with logged time`} />
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:'4px 20px' }}>
+                  {subjIds.map(sid => {
+                    const info = subjectInfo(db, student, sid);
+                    return (
+                      <div key={sid} className="pf-row" style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'4px 0', borderBottom:`1px solid #F0F0F0` }}>
+                        <span style={{ color:'#333' }}>{info.icon} {info.name}</span>
+                        <span style={{ color:C.muted, fontVariantNumeric:'tabular-nums' }}>{fmtHours(hrs.bySubject[sid])} hrs</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <Note>Parent-logged instruction time by subject for the {sy} school year.</Note>
+              </>
+            );
+          })()}
         </Section>
       )}
 

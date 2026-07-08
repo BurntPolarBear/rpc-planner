@@ -34,6 +34,7 @@ export const INIT = {
   activityLogs: [], // { activityId, studentId, date } — one entry = done for that day
   writingSamples: [], // { id, studentId, date, title, text, wordCount, source, analysis:{ traits, overall, strengths, improvements, voice, questions } }
   grades: [],     // { id, studentId, subjectId, date, schoolYear, title, kind, weight, source, score, letter, benchmark, benchmarkNote, rubric:[{name,points,max,comment}], strengths[], improvements[], summary, teacherNote, parentNote, aiGenerated, rigor, gradeLevel }
+  hourLogs: [],   // { id, studentId, subjectId, date, hours, note } — per-subject instruction time (parent-only; never in a student's slice)
   settings: { parentPin: '' }, // empty = no PIN required
 };
 
