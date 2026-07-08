@@ -48,13 +48,20 @@ const supabase = createClient(
 );
 
 // ─── LOGIN ───────────────────────────────────────────────────────────────────
-// Passwordless sign-in: the parent enters their email and receives a one-time
-// magic link. Clicking it returns them here already signed in (supabase-js reads
-// the token from the URL automatically). No passwords are stored anywhere.
+// Parents sign in with a passwordless email magic link. Students use a shared
+// class passcode that starts an anonymous session (interim stopgap until each
+// student has their own account). Clicking a magic link returns the parent here
+// already signed in (supabase-js reads the token from the URL automatically).
 function Login() {
+  const [tab, setTab]       = useState('parent'); // parent | student
+  // parent
   const [email, setEmail]   = useState('');
-  const [status, setStatus] = useState('idle'); // idle | sending | sent | error
+  const [status, setStatus] = useState('idle');   // idle | sending | sent | error
   const [msg, setMsg]       = useState('');
+  // student
+  const [code, setCode]     = useState('');
+  const [sErr, setSErr]     = useState('');
+  const [sBusy, setSBusy]   = useState(false);
 
   const send = async (e) => {
     e.preventDefault();
@@ -69,49 +76,96 @@ function Login() {
     else setStatus('sent');
   };
 
+  const studentEnter = async (e) => {
+    e.preventDefault();
+    const expected = import.meta.env.VITE_STUDENT_CODE;
+    if (!expected) { setSErr('Student sign-in is not set up yet. Ask a parent.'); return; }
+    if (code.trim() !== String(expected)) { setSErr("That code does not match. Try again."); return; }
+    setSBusy(true); setSErr('');
+    const { error } = await supabase.auth.signInAnonymously();
+    if (error) { setSBusy(false); setSErr('Could not sign in. Ask a parent for help.'); }
+    // On success, onAuthStateChange establishes the session and the app loads.
+  };
+
+  const cardWrap = { minHeight:'100vh', background:C.navy, display:'flex', alignItems:'center', justifyContent:'center', padding:20, fontFamily:'system-ui,-apple-system,sans-serif' };
+  const cardBox  = { background:'white', borderRadius:16, padding:'34px 30px', width:'100%', maxWidth:380, boxShadow:'0 12px 40px rgba(0,0,0,0.3)', borderTop:`4px solid ${C.gold}` };
+
   return (
-    <div style={{ minHeight:'100vh', background:C.navy, display:'flex', alignItems:'center', justifyContent:'center', padding:20, fontFamily:'system-ui,-apple-system,sans-serif' }}>
-      <div style={{ background:'white', borderRadius:16, padding:'34px 30px', width:'100%', maxWidth:380, boxShadow:'0 12px 40px rgba(0,0,0,0.3)', borderTop:`4px solid ${C.gold}` }}>
+    <div style={cardWrap}>
+      <div style={cardBox}>
         <div style={{ fontFamily:'Georgia,serif', fontSize:24, color:C.navy, fontWeight:'bold', textAlign:'center', marginBottom:6 }}>
           📋 RPC Planner
         </div>
         <div style={{ textAlign:'center', color:C.muted, fontSize:14, marginBottom:24 }}>
-          Sign in to your family's planner
+          {tab === 'parent' ? "Sign in to your family's planner" : 'Student sign-in'}
         </div>
 
-        {status === 'sent' ? (
-          <div style={{ textAlign:'center', color:C.navy, fontSize:15, lineHeight:1.5 }}>
-            <div style={{ fontSize:34, marginBottom:10 }}>📬</div>
-            Check your email — we sent a sign-in link to<br /><strong>{email.trim()}</strong>.
-            <div style={{ color:C.muted, fontSize:13, marginTop:14 }}>
-              Open it on this device and you'll be signed in. The link expires shortly.
+        {tab === 'parent' ? (
+          status === 'sent' ? (
+            <div style={{ textAlign:'center', color:C.navy, fontSize:15, lineHeight:1.5 }}>
+              <div style={{ fontSize:34, marginBottom:10 }}>📬</div>
+              Check your email — we sent a sign-in link to<br /><strong>{email.trim()}</strong>.
+              <div style={{ color:C.muted, fontSize:13, marginTop:14 }}>
+                Open it on this device and you'll be signed in. The link expires shortly.
+              </div>
+              <button onClick={() => { setStatus('idle'); setEmail(''); }} style={{ marginTop:18, background:'none', border:'none', color:C.gold, fontSize:13, fontWeight:700, cursor:'pointer' }}>
+                Use a different email
+              </button>
             </div>
-            <button onClick={() => { setStatus('idle'); setEmail(''); }} style={{ marginTop:18, background:'none', border:'none', color:C.gold, fontSize:13, fontWeight:700, cursor:'pointer' }}>
-              Use a different email
-            </button>
-          </div>
+          ) : (
+            <form onSubmit={send}>
+              <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', color:C.muted, marginBottom:6 }}>
+                Email address
+              </label>
+              <input
+                type="email" required autoFocus value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                style={{ width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'11px 13px', fontSize:15, fontFamily:'inherit', boxSizing:'border-box', marginBottom:14 }}
+              />
+              <button
+                type="submit" disabled={status === 'sending'}
+                style={{ width:'100%', background:C.navy, color:'white', border:'none', borderRadius:8, padding:'12px', fontSize:15, fontWeight:700, cursor: status==='sending' ? 'default' : 'pointer', opacity: status==='sending' ? 0.7 : 1 }}
+              >
+                {status === 'sending' ? 'Sending…' : 'Email me a sign-in link'}
+              </button>
+              {status === 'error' && (
+                <div style={{ marginTop:12, color:C.red, fontSize:13, textAlign:'center' }}>{msg || 'Something went wrong. Try again.'}</div>
+              )}
+            </form>
+          )
         ) : (
-          <form onSubmit={send}>
+          <form onSubmit={studentEnter}>
             <label style={{ display:'block', fontSize:11, fontWeight:800, textTransform:'uppercase', letterSpacing:'0.08em', color:C.muted, marginBottom:6 }}>
-              Email address
+              Student passcode
             </label>
             <input
-              type="email" required autoFocus value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              type="password" required autoFocus value={code}
+              onChange={e => setCode(e.target.value)}
+              placeholder="Enter your class code"
               style={{ width:'100%', border:`1.5px solid ${C.border}`, borderRadius:8, padding:'11px 13px', fontSize:15, fontFamily:'inherit', boxSizing:'border-box', marginBottom:14 }}
             />
             <button
-              type="submit" disabled={status === 'sending'}
-              style={{ width:'100%', background:C.navy, color:'white', border:'none', borderRadius:8, padding:'12px', fontSize:15, fontWeight:700, cursor: status==='sending' ? 'default' : 'pointer', opacity: status==='sending' ? 0.7 : 1 }}
+              type="submit" disabled={sBusy}
+              style={{ width:'100%', background:C.navy, color:'white', border:'none', borderRadius:8, padding:'12px', fontSize:15, fontWeight:700, cursor: sBusy ? 'default' : 'pointer', opacity: sBusy ? 0.7 : 1 }}
             >
-              {status === 'sending' ? 'Sending…' : 'Email me a sign-in link'}
+              {sBusy ? 'Signing in…' : 'Start school'}
             </button>
-            {status === 'error' && (
-              <div style={{ marginTop:12, color:C.red, fontSize:13, textAlign:'center' }}>{msg || 'Something went wrong. Try again.'}</div>
-            )}
+            {sErr && <div style={{ marginTop:12, color:C.red, fontSize:13, textAlign:'center' }}>{sErr}</div>}
           </form>
         )}
+
+        <div style={{ textAlign:'center', marginTop:20, paddingTop:16, borderTop:`1px solid ${C.border}` }}>
+          {tab === 'parent' ? (
+            <button onClick={() => { setTab('student'); setSErr(''); }} style={{ background:'none', border:'none', color:C.gold, fontSize:13, fontWeight:700, cursor:'pointer' }}>
+              I'm a student →
+            </button>
+          ) : (
+            <button onClick={() => { setTab('parent'); setMsg(''); }} style={{ background:'none', border:'none', color:C.gold, fontSize:13, fontWeight:700, cursor:'pointer' }}>
+              ← I'm a parent
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
