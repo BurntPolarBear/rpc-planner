@@ -228,6 +228,8 @@ export default function App() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState(false);
   const sheetStartY = useRef(null);
+  const [sheetClosing, setSheetClosing] = useState(false);
+  const closeMore = () => { setSheetClosing(true); setTimeout(() => { setMoreOpen(false); setSheetClosing(false); }, 270); };
   const [demoDb, setDemoDb] = useState(null);
 
   // Auth bootstrap: read any existing session, then listen for sign-in/out
@@ -403,6 +405,10 @@ export default function App() {
         .app-navitem:hover { background:#F5F7F9; }
         .app-navitem[data-on="true"] { background:#FBF5E7; color:${C.gold}; font-weight:700; box-shadow:inset 3px 0 0 ${C.gold}; }
         .app-bottomnav { display:none; }
+        @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+        @keyframes fadeOut { from { opacity:1 } to { opacity:0 } }
+        @keyframes sheetUp { from { transform: translateY(100%) } to { transform: translateY(0) } }
+        @keyframes sheetDown { from { transform: translateY(0) } to { transform: translateY(100%) } }
         .app-bn { display:flex; flex-direction:column; align-items:center; gap:2px; background:none; border:none; cursor:pointer; font-size:10px; color:${C.muted}; padding:2px 6px; }
         .app-bn[data-on="true"] { color:${C.gold}; font-weight:700; }
         .nav-toggle { display:inline-block; }
@@ -496,7 +502,8 @@ export default function App() {
             ))}
           </aside>
           )}
-          <main className="app-main" style={{ flex:1, minWidth:0, maxWidth:1040, padding:'20px 24px 92px' }}>
+          <main className="app-main" style={{ flex:1, minWidth:0, padding:'20px 24px 92px' }}>
+            <div style={{ maxWidth:1000, margin:'0 auto' }}>
             {/* key={view}: each tab gets its own error boundary; a crash is escaped by switching tabs. */}
             <ErrorBoundary key={view}>
               <Suspense fallback={<TabFallback />}>
@@ -513,6 +520,7 @@ export default function App() {
                 {view==='setup'    && <Setup db={activeDb} mut={activeMut} />}
               </Suspense>
             </ErrorBoundary>
+            </div>
           </main>
         </div>
       )}
@@ -537,24 +545,24 @@ export default function App() {
 
       {/* Mobile "More" sheet */}
       {moreOpen && (
-        <div onClick={() => setMoreOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(15,30,48,0.35)', zIndex:10, display:'flex', alignItems:'flex-end' }}>
+        <div onClick={closeMore} style={{ position:'fixed', inset:0, background:'rgba(15,30,48,0.35)', zIndex:10, display:'flex', alignItems:'flex-end', animation: sheetClosing ? 'fadeOut .26s ease forwards' : 'fadeIn .2s ease' }}>
           <div onClick={e => e.stopPropagation()}
             onTouchStart={e => { sheetStartY.current = e.touches[0].clientY; }}
-            onTouchEnd={e => { if (e.changedTouches[0].clientY - (sheetStartY.current ?? 0) > 55) setMoreOpen(false); }}
-            style={{ background:'white', width:'100%', borderTopLeftRadius:16, borderTopRightRadius:16, padding:'10px 16px 26px', maxHeight:'72vh', overflowY:'auto' }}>
+            onTouchEnd={e => { if (e.changedTouches[0].clientY - (sheetStartY.current ?? 0) > 55) closeMore(); }}
+            style={{ background:'white', width:'100%', borderTopLeftRadius:16, borderTopRightRadius:16, padding:'10px 16px 26px', maxHeight:'72vh', overflowY:'auto', animation: sheetClosing ? 'sheetDown .28s ease forwards' : 'sheetUp .28s cubic-bezier(.22,1,.36,1)' }}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
               <span style={{ width:32 }} />
-              <button onClick={() => setMoreOpen(false)} aria-label="Close menu" style={{ background:'none', border:'none', cursor:'pointer', padding:'4px 20px' }}>
+              <button onClick={closeMore} aria-label="Close menu" style={{ background:'none', border:'none', cursor:'pointer', padding:'4px 20px' }}>
                 <span style={{ display:'block', width:40, height:5, background:C.border, borderRadius:3 }} />
               </button>
-              <button onClick={() => setMoreOpen(false)} aria-label="Close menu" style={{ background:'none', border:'none', cursor:'pointer', fontSize:18, color:C.muted, width:32 }}>✕</button>
+              <button onClick={closeMore} aria-label="Close menu" style={{ background:'none', border:'none', cursor:'pointer', fontSize:18, color:C.muted, width:32 }}>✕</button>
             </div>
             {NAV_GROUPS.map(([group, items]) => (
               <div key={group} style={{ marginBottom:8 }}>
                 <div style={{ fontSize:10, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:C.muted, margin:'6px 4px' }}>{group}</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
                   {items.map(([id, label]) => (
-                    <button key={id} onClick={() => { setView(id); setMoreOpen(false); }} style={{
+                    <button key={id} onClick={() => { setView(id); closeMore(); }} style={{
                       textAlign:'left', background: view===id ? '#FBF5E7' : '#F7F9FB',
                       border:`1px solid ${view===id ? C.gold : C.border}`, color: view===id ? C.gold : '#40505f',
                       fontWeight: view===id ? 700 : 500, borderRadius:10, padding:'11px 12px', fontSize:13, cursor:'pointer' }}>
