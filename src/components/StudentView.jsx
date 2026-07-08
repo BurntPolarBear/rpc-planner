@@ -83,35 +83,40 @@ export function StudentToday({ db, stuId, setStu, mut, readOnly = false, onBack 
   return (
     <div>
       {/* Header */}
-      <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16, flexWrap:'wrap' }}>
-        <Btn onClick={() => onBack ? onBack() : setStu(null)} style={{ background:'#E8EEF4', color:C.navy, padding:'6px 12px', fontSize:12 }}>← Back</Btn>
-        <div style={{ flex:1, minWidth:140 }}>
-          <div style={{ fontFamily:'Georgia,serif', fontSize:21, fontWeight:'bold', color:C.navy }}>{student?.emoji} {student?.name}'s Day</div>
-          <div style={{ fontSize:13, color:C.muted }}>{shortDate(TODAY)} · {gg?.name}</div>
+      <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:18, flexWrap:'wrap' }}>
+        <Btn onClick={() => onBack ? onBack() : setStu(null)} style={{ background:'#E8EEF4', color:C.navy, padding:'8px 14px', fontSize:13 }}>← Back</Btn>
+        <div style={{ width:54, height:54, borderRadius:16, background:'#FBF5E7', display:'flex', alignItems:'center', justifyContent:'center', fontSize:32, flexShrink:0 }}>{student?.emoji}</div>
+        <div style={{ flex:1, minWidth:150 }}>
+          <div style={{ fontFamily:'Georgia,serif', fontSize:25, fontWeight:'bold', color:C.navy, lineHeight:1.15 }}>{student?.name}'s day</div>
+          <div style={{ fontSize:13.5, color:C.muted }}>{shortDate(TODAY)} · {gg?.name}</div>
         </div>
-        <Btn onClick={() => setScreen('report')} style={{ background:C.gold, color:'white', padding:'6px 12px', fontSize:12, flexShrink:0 }}>🎓 Report Card</Btn>
         {streak >= 2 && (
-          <div style={{ textAlign:'center', flexShrink:0, background:'#FFF7ED', border:'1px solid #FED7AA', borderRadius:10, padding:'6px 12px' }}>
-            <div style={{ fontWeight:800, fontSize:20, color:'#EA580C', fontVariantNumeric:'tabular-nums' }}>🔥 {streak}</div>
-            <div style={{ fontSize:10, color:'#9A3412', fontWeight:600 }}>day streak</div>
+          <div style={{ textAlign:'center', flexShrink:0, background:'#FFF7ED', border:'1px solid #FED7AA', borderRadius:12, padding:'8px 14px' }}>
+            <div style={{ fontWeight:800, fontSize:22, color:'#EA580C', fontVariantNumeric:'tabular-nums' }}>🔥 {streak}</div>
+            <div style={{ fontSize:10.5, color:'#9A3412', fontWeight:700 }}>day streak</div>
           </div>
         )}
-        {totalPending > 0 && (
-          <div style={{ textAlign:'right', flexShrink:0 }}>
-            <div style={{ fontWeight:800, fontSize:22, color: approved===todayLessons.length && carryover.length===0 ? C.green : C.navy, fontVariantNumeric:'tabular-nums' }}>
-              {approved}/{todayLessons.length}
-            </div>
-            <div style={{ fontSize:11, color:C.muted }}>today approved</div>
-          </div>
-        )}
+        <Btn onClick={() => setScreen('report')} style={{ background:C.gold, color:'white', padding:'8px 14px', fontSize:13, flexShrink:0 }}>🎓 Report Card</Btn>
       </div>
 
-      {/* Today's progress bar */}
-      {todayLessons.length > 0 && (
-        <div style={{ height:6, background:'#D1D9E0', borderRadius:3, marginBottom:20, overflow:'hidden' }}>
-          <div style={{ height:'100%', background:C.green, width:`${(approved/todayLessons.length)*100}%`, borderRadius:3, transition:'width .4s ease' }} />
-        </div>
-      )}
+      {/* Encouraging progress banner */}
+      {todayLessons.length > 0 && (() => {
+        const total = todayLessons.length;
+        const allDone = approved === total && carryover.length === 0;
+        const msg = allDone
+          ? 'All done for today — amazing work! 🎉'
+          : approved === 0
+          ? "Let's get started — you've got this!"
+          : `You're doing great — ${approved} of ${total} done`;
+        return (
+          <div style={{ background:'#FBF5E7', border:'1px solid #EBD9AE', borderRadius:14, padding:'13px 16px', marginBottom:22 }}>
+            <div style={{ fontSize:14.5, fontWeight:700, color:C.navy, marginBottom:8 }}>{msg}</div>
+            <div style={{ height:9, background:'#EADFC4', borderRadius:5, overflow:'hidden' }}>
+              <div style={{ height:'100%', width:`${(approved/total)*100}%`, background: allDone ? C.green : C.gold, borderRadius:5, transition:'width .4s ease' }} />
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Catch-up section */}
       {carryover.length > 0 && (
@@ -345,16 +350,16 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
   const canExpand = hasQuestions || hasTasks || lesson.notes?.trim();
 
   return (
-    <div style={{ ...card, borderLeft:`4px solid ${subj.color}`, marginBottom:12 }}>
+    <div style={{ ...card, borderRadius:16, marginBottom:14 }}>
       {/* Header */}
       <div
         onClick={() => canExpand ? setOpen(o=>!o) : undefined}
         style={{ display:'flex', alignItems:'center', justifyContent:'space-between', cursor: canExpand ? 'pointer' : 'default', userSelect:'none' }}
       >
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <span style={{ fontSize:22 }}>{subj.icon}</span>
+          <span style={{ width:44, height:44, borderRadius:12, background:subj.color, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>{subj.icon}</span>
           <div>
-            <div style={{ fontWeight:700, fontSize:15, color:C.navy }}>{subj.name}</div>
+            <div style={{ fontWeight:700, fontSize:16, color:C.navy }}>{subj.name}</div>
             <div style={{ fontSize:12, color:C.muted }}>
               Lesson {lesson.lessonNum}
               {fromDate && <span style={{ marginLeft:6, color:C.yellow, fontWeight:600 }}>· from {fromDate}</span>}
