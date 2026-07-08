@@ -52,7 +52,7 @@ const supabase = createClient(
 // class passcode that starts an anonymous session (interim stopgap until each
 // student has their own account). Clicking a magic link returns the parent here
 // already signed in (supabase-js reads the token from the URL automatically).
-function Login() {
+function Login({ onDemo }) {
   const [tab, setTab]       = useState('parent'); // parent | student
   // parent
   const [email, setEmail]   = useState('');
@@ -166,6 +166,14 @@ function Login() {
             </button>
           )}
         </div>
+
+        {onDemo && (
+          <div style={{ textAlign:'center', marginTop:12 }}>
+            <button onClick={onDemo} style={{ background:'none', border:'none', color:C.muted, fontSize:12.5, cursor:'pointer', textDecoration:'underline' }}>
+              Just exploring? Try the demo →
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -207,6 +215,8 @@ export default function App() {
   // Prefill payload for the Grades composer when jumping straight from Review.
   const [gradePrefill, setGradePrefill] = useState(null);
   const [access, setAccess] = useState('checking'); // checking | ok | denied
+  const [demo, setDemo]     = useState(false);
+  const [demoDb, setDemoDb] = useState(null);
 
   // Auth bootstrap: read any existing session, then listen for sign-in/out
   // (also fires when a magic link is opened and the session is established).
@@ -224,9 +234,21 @@ export default function App() {
 
   const userId = session?.user?.id;
 
+  // Demo mode: loads fictional data lazily and runs entirely in the browser —
+  // no auth, no database reads or writes. Safe to show publicly.
+  const startDemo = async () => {
+    const mod = await import('./utils/demoData');
+    setDemoDb(JSON.parse(JSON.stringify(mod.DEMO)));
+    setDemo(true); setMode('parent'); setView('today'); setStu(null);
+  };
+  const exitDemo = () => { setDemo(false); setDemoDb(null); setMode('student'); setView('today'); setStu(null); };
+  const demoMut = fn => setDemoDb(prev => { const next = JSON.parse(JSON.stringify(prev)); fn(next); return next; });
+
+  const activeDb = demo ? demoDb : db;
+
   const handleModeToggle = () => {
     if (mode === 'student') {
-      const pin = db?.settings?.parentPin;
+      const pin = activeDb?.settings?.parentPin;
       if (pin) { setShowPin(true); }
       else { setMode('parent'); setView('today'); }
     } else {
@@ -307,11 +329,17 @@ export default function App() {
     return next;
   });
 
+  const activeMut = demo ? demoMut : mut;
+
   // ── Gates ──
-  if (!authReady) return <Splash>Loading…</Splash>;
-  if (!session)   return <Login />;
-  if (access === 'denied') return <NoAccess email={session.user?.email} onSignOut={signOut} />;
-  if (!db)        return <Splash>Loading your planner…</Splash>;
+  if (!demo) {
+    if (!authReady) return <Splash>Loading…</Splash>;
+    if (!session)   return <Login onDemo={startDemo} />;
+    if (access === 'denied') return <NoAccess email={session.user?.email} onSignOut={signOut} />;
+    if (!db)        return <Splash>Loading your planner…</Splash>;
+  } else if (!demoDb) {
+    return <Splash>Loading demo…</Splash>;
+  }
 
   const navItems = mode === 'parent'
     ? [['today','📊 Today'], ['week','🗓 Week'], ['plan','📋 Plan'], ['review','✅ Review'], ['writing','✍️ Writing'], ['grades','🎓 Grades'], ['progress','📈 Progress'], ['records','📄 Records'], ['export','📤 Export'], ['setup','⚙️ Setup']]
@@ -372,7 +400,15 @@ export default function App() {
           >
             {mode==='parent' ? '👨‍👩‍👧 Parent Mode' : '🔒 Parent Mode'}
           </Btn>
-          {mode==='parent' && (
+          {demo ? (
+            <Btn
+              onClick={exitDemo}
+              title="Exit demo"
+              style={{ background:C.gold, color:'white', padding:'6px 12px' }}
+            >
+              Exit demo
+            </Btn>
+          ) : (mode==='parent' && (
             <Btn
               onClick={signOut}
               title="Sign out"
@@ -380,13 +416,19 @@ export default function App() {
             >
               Sign out
             </Btn>
-          )}
+          ))}
         </div>
       </header>
 
+      {demo && (
+        <div style={{ background:C.gold, color:'#3a2a00', textAlign:'center', fontSize:12.5, fontWeight:700, padding:'5px 10px' }}>
+          🎭 Demo mode — sample data. Nothing here is saved.
+        </div>
+      )}
+
       {showPin && (
         <PinModal
-          correctPin={db?.settings?.parentPin}
+          correctPin={activeDb?.settings?.parentPin}
           onSuccess={() => { setShowPin(false); setMode('parent'); setView('today'); }}
           onCancel={() => setShowPin(false)}
         />
@@ -411,17 +453,17 @@ export default function App() {
             can be escaped just by switching tabs — the new view remounts clean. */}
         <ErrorBoundary key={view}>
           <Suspense fallback={<TabFallback />}>
-            {view==='today' && mode==='student' && <StudentToday db={db} stuId={stuId} setStu={setStu} mut={mut} />}
-            {view==='today' && mode==='parent'  && <Overview db={db} onReview={() => setView('review')} />}
-            {view==='week'  && mode==='parent'  && <WeekOverview db={db} weekMon={weekMon} setWk={setWk} onGoToPlan={goToPlan} />}
-            {view==='plan'  && mode==='parent'  && <Planner db={db} mut={mut} weekMon={weekMon} setWk={setWk} activeGG={planGG} setActiveGG={setPGG} />}
-            {view==='review'&& mode==='parent'  && <Review db={db} mut={mut} onGradeThis={goToGrade} />}
-            {view==='writing'&& mode==='parent'  && <WritingView db={db} mut={mut} />}
-            {view==='grades'&& mode==='parent'  && <GradesView db={db} mut={mut} prefill={gradePrefill} onPrefillConsumed={()=>setGradePrefill(null)} />}
-            {view==='progress'&& mode==='parent'  && <ProgressView db={db} />}
-            {view==='records'&& mode==='parent'  && <RecordsView db={db} />}
-            {view==='export'&& mode==='parent'  && <ExportView db={db} weekMon={weekMon} setWk={setWk} />}
-            {view==='setup' && <Setup db={db} mut={mut} />}
+            {view==='today' && mode==='student' && <StudentToday db={activeDb} stuId={stuId} setStu={setStu} mut={activeMut} />}
+            {view==='today' && mode==='parent'  && <Overview db={activeDb} onReview={() => setView('review')} />}
+            {view==='week'  && mode==='parent'  && <WeekOverview db={activeDb} weekMon={weekMon} setWk={setWk} onGoToPlan={goToPlan} />}
+            {view==='plan'  && mode==='parent'  && <Planner db={activeDb} mut={activeMut} weekMon={weekMon} setWk={setWk} activeGG={planGG} setActiveGG={setPGG} />}
+            {view==='review'&& mode==='parent'  && <Review db={activeDb} mut={activeMut} onGradeThis={goToGrade} />}
+            {view==='writing'&& mode==='parent'  && <WritingView db={activeDb} mut={activeMut} />}
+            {view==='grades'&& mode==='parent'  && <GradesView db={activeDb} mut={activeMut} prefill={gradePrefill} onPrefillConsumed={()=>setGradePrefill(null)} />}
+            {view==='progress'&& mode==='parent'  && <ProgressView db={activeDb} />}
+            {view==='records'&& mode==='parent'  && <RecordsView db={activeDb} />}
+            {view==='export'&& mode==='parent'  && <ExportView db={activeDb} weekMon={weekMon} setWk={setWk} />}
+            {view==='setup' && <Setup db={activeDb} mut={activeMut} />}
           </Suspense>
         </ErrorBoundary>
       </main>
