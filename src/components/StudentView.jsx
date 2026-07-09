@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { ReportCard } from './ReportCard';
 import { TODAY, calcStreak, getMon, shortDate, toDate, uid } from '../utils/dates';
 import { Btn, C, card, inp, lbl } from '../utils/theme';
+import { supabase } from '../utils/supabaseClient';
+import { fileToGradeImage, dataUrlToBlob } from '../utils/image';
 
 
 // ─── STUDENT TODAY ────────────────────────────────────────────────────────────
@@ -39,14 +41,17 @@ export function StudentToday({ db, stuId, setStu, mut, readOnly = false, onBack 
   }
 
   // Save answers — uses the lesson's original date so review stays consistent
-  const save = (subjectId, lessonNum, answers, tasksDone, date = TODAY) => mut(d => {
+  const save = (subjectId, lessonNum, answers, tasksDone, date = TODAY, extra = {}) => mut(d => {
     const ex = d.answers.find(a => a.studentId===stuId && a.date===date && a.subjectId===subjectId);
     if (ex) {
       ex.answers = answers;
       if (tasksDone !== undefined) ex.tasksDone = tasksDone;
+      if (extra.photos) ex.photos = extra.photos;
+      if (extra.aiGrade) ex.aiGrade = extra.aiGrade;
       if (ex.status !== 'needs_revision') ex.status = 'pending';
     }
-    else d.answers.push({ id:uid(), studentId:stuId, date, subjectId, lessonNum, answers, tasksDone:tasksDone||[], status:'pending', parentNote:'' });
+    else d.answers.push({ id:uid(), studentId:stuId, date, subjectId, lessonNum, answers, tasksDone:tasksDone||[], status:'pending', parentNote:'',
+      ...(extra.photos ? { photos: extra.photos } : {}), ...(extra.aiGrade ? { aiGrade: extra.aiGrade } : {}) });
   });
 
   // For question-free lessons — one tap marks it done, no review needed
@@ -139,7 +144,8 @@ export function StudentToday({ db, stuId, setStu, mut, readOnly = false, onBack 
                 key={`${lesson.originalDate}-${lesson.subjectId}`}
                 subj={subj} lesson={lesson} submission={sub} readOnly={readOnly}
                 fromDate={shortDate(lesson.originalDate)}
-                onSave={(ans, doneT) => save(lesson.subjectId, lesson.lessonNum, ans, doneT, lesson.originalDate)}
+                onSave={(ans, doneT, extra) => save(lesson.subjectId, lesson.lessonNum, ans, doneT, lesson.originalDate, extra)}
+                gradeLevel={gg?.name}
                 onComplete={doneT => complete(lesson.subjectId, lesson.lessonNum, doneT, lesson.originalDate)}
                 onTasksChange={doneT => saveTasks(lesson.subjectId, lesson.lessonNum, doneT, lesson.originalDate)}
               />
@@ -171,7 +177,8 @@ export function StudentToday({ db, stuId, setStu, mut, readOnly = false, onBack 
             if (!subj) return null;
             const sub = todaySubs.find(a => a.subjectId === lesson.subjectId);
             return <LessonCard key={lesson.subjectId} subj={subj} lesson={lesson} submission={sub} readOnly={readOnly}
-              onSave={(ans, doneT) => save(lesson.subjectId, lesson.lessonNum, ans, doneT)}
+              onSave={(ans, doneT, extra) => save(lesson.subjectId, lesson.lessonNum, ans, doneT, TODAY, extra)}
+              gradeLevel={gg?.name}
               onComplete={doneT => complete(lesson.subjectId, lesson.lessonNum, doneT)}
               onTasksChange={doneT => saveTasks(lesson.subjectId, lesson.lessonNum, doneT)}
             />;
@@ -306,7 +313,7 @@ function ActivityCard({ activity: a, done, onToggle }) {
 
 
 // ─── LESSON CARD ──────────────────────────────────────────────────────────────
-function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChange, fromDate, readOnly = false }) {
+function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChange, fromDate, readOnly = false, gradeLevel = '' }) {
   const taskList    = lesson.tasks || [];
   const hasQuestions = (lesson.questions||[]).length > 0;
   const hasTasks     = taskList.length > 0;
@@ -321,6 +328,9 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
   });
   const [flash, setFlash]   = useState(false);
   const [checkFlash, setCF] = useState(false);
+  const [photos, setPhotos]     = useState([]);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [grading, setGrading]   = useState(false);
 
   const status = submission?.status;
   const statusLabel = { approved:'✅ Approved', needs_revision:'↩ Needs revision', pending:'⏳ Awaiting review', draft:'📝 In progress' };
@@ -340,14 +350,63 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
     }
   };
 
-  const save = () => { onSave(ans, doneT); setFlash(true); setTimeout(() => setFlash(false), 2000); };
+  const onPickPhotos = async (fileList) => {
+    const files = Array.from(fileList || []).slice(0, 5 - photos.length);
+    if (!files.length) return;
+    setPhotoBusy(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const uid = user?.id;
+    const added = [];
+    for (const file of files) {
+      try {
+        const img = await fileToGradeImage(file);
+        const path = `${uid}/${lesson.subjectId}-${Date.now()}-${Math.random().toString(36).slice(2,7)}.jpg`;
+        const blob = await dataUrlToBlob(img.preview);
+        const { error } = await supabase.storage.from('work-photos').upload(path, blob, { contentType:'image/jpeg', upsert:false });
+        if (!error) added.push({ path, preview: img.preview, data: img.data, media_type: img.media_type });
+      } catch { /* skip this file */ }
+    }
+    setPhotos(prev => [...prev, ...added].slice(0, 5));
+    setPhotoBusy(false);
+  };
+
+  const removePhoto = (i) => {
+    const p = photos[i];
+    if (p?.path) supabase.storage.from('work-photos').remove([p.path]);
+    setPhotos(prev => prev.filter((_, idx) => idx !== i));
+  };
+
+  const doSubmit = async () => {
+    let aiGrade = null;
+    if (photos.length) {
+      setGrading(true);
+      try {
+        const res = await fetch('/api/grade-work', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            subject: subj.name, gradeLevel, rigor: 'standard',
+            title: `${subj.name} · Lesson ${lesson.lessonNum}`,
+            images: photos.map(p => ({ media_type: p.media_type, data: p.data })),
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.grade) aiGrade = data.grade;
+      } catch { /* leave ungraded — parent can still grade */ }
+      setGrading(false);
+    }
+    const extra = {};
+    if (photos.length) { extra.photos = photos.map(p => p.path); if (aiGrade) extra.aiGrade = aiGrade; }
+    onSave(ans, doneT, extra);
+    setPhotos([]);
+    setFlash(true); setTimeout(() => setFlash(false), 2000);
+  };
 
   const handleComplete = (e) => {
     e.stopPropagation(); setCF(true);
     setTimeout(() => { onComplete(doneT); setCF(false); }, 400);
   };
 
-  const canExpand = hasQuestions || hasTasks || lesson.notes?.trim();
+  const canExpand = hasQuestions || hasTasks || lesson.notes?.trim() || (!readOnly && submission?.status !== 'approved');
 
   return (
     <div style={{ ...card, borderRadius:16, marginBottom:14 }}>
@@ -453,14 +512,37 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
               />
             </div>
           ))}
+          {/* Photo of work */}
+          {!readOnly && status !== 'approved' && (
+            <div style={{ marginBottom:14 }}>
+              <div style={lbl}>Photo of your work (optional)</div>
+              {photos.length > 0 && (
+                <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:8 }}>
+                  {photos.map((p, i) => (
+                    <div key={i} style={{ position:'relative' }}>
+                      <img src={p.preview} alt={`work ${i+1}`} style={{ width:74, height:74, objectFit:'cover', borderRadius:10, border:`1px solid ${C.border}` }} />
+                      <button onClick={() => removePhoto(i)} aria-label="Remove photo" style={{ position:'absolute', top:-7, right:-7, width:22, height:22, borderRadius:'50%', background:C.red, color:'white', border:'2px solid white', cursor:'pointer', fontSize:12, lineHeight:1 }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {photos.length < 5 && (
+                <label style={{ display:'inline-flex', alignItems:'center', gap:8, background:'#EEF4FB', color:C.navy, border:`1px solid ${C.border}`, borderRadius:10, padding:'10px 14px', fontSize:13, fontWeight:600, cursor: photoBusy ? 'default' : 'pointer' }}>
+                  {photoBusy ? 'Uploading…' : (photos.length ? '＋ Add another photo' : '📷 Add a photo of your work')}
+                  <input type="file" accept="image/*" capture="environment" multiple disabled={photoBusy} onChange={e => onPickPhotos(e.target.files)} style={{ display:'none' }} />
+                </label>
+              )}
+            </div>
+          )}
+
           {/* Submit */}
-          {!readOnly && hasQuestions && status!=='approved' && (
-            <button onClick={save} style={{
-              border:'none', borderRadius:8, padding:'10px 0', cursor:'pointer', fontSize:14,
+          {!readOnly && (hasQuestions || photos.length > 0) && status!=='approved' && (
+            <button onClick={doSubmit} disabled={grading} style={{
+              border:'none', borderRadius:8, padding:'11px 0', cursor: grading ? 'default' : 'pointer', fontSize:14,
               fontWeight:700, width:'100%', transition:'background .2s',
-              background: flash ? C.green : C.navy, color:'white'
+              background: flash ? C.green : C.navy, color:'white', opacity: grading ? 0.75 : 1,
             }}>
-              {flash ? '✓ Saved!' : 'Submit Answers'}
+              {grading ? 'Grading your work…' : flash ? '✓ Submitted!' : (photos.length > 0 ? 'Submit work' : 'Submit answers')}
             </button>
           )}
         </div>

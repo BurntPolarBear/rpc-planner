@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { KIND_OPTIONS } from '../utils/constants';
+import { fileToGradeImage } from '../utils/image';
 import { RUBRIC_PRESETS, getPreset } from '../utils/rubricPresets';
 import { TODAY, shortDate, uid } from '../utils/dates';
 import { BENCH, CURRENT_SY, gradeColor, pctToLetter, schoolYearOf } from '../utils/grades';

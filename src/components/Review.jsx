@@ -1,5 +1,8 @@
-import { useState } from 'react';
-import { TODAY, getMon, shortDate } from '../utils/dates';
+import { useState, useEffect } from 'react';
+import { TODAY, getMon, shortDate, uid } from '../utils/dates';
+import { BENCH, schoolYearOf } from '../utils/grades';
+import { BenchBadge } from './ReportCard';
+import { supabase } from '../utils/supabaseClient';
 import { Btn, C, card, inp, lbl } from '../utils/theme';
 
 
@@ -25,6 +28,20 @@ export function Review({ db, mut, onGradeThis }) {
 
   const approve  = id => mut(d=>{ const a=d.answers.find(x=>x.id===id); if(a){a.status='approved';a.parentNote='';} });
   const revise   = (id, note) => mut(d=>{ const a=d.answers.find(x=>x.id===id); if(a){a.status='needs_revision';a.parentNote=note;} });
+  // Turn a student's AI-suggested grade into a saved grade on the report card,
+  // and approve the submission. The parent chooses to do this — nothing auto-saves.
+  const saveAiGrade = (sub) => mut(d => {
+    const g = sub.aiGrade; if (!g) return;
+    if (!d.grades) d.grades = [];
+    d.grades.push({
+      id: uid(), studentId: sub.studentId, subjectId: sub.subjectId, date: sub.date,
+      schoolYear: schoolYearOf(sub.date), title: `Lesson ${sub.lessonNum}`, kind: 'Assignment',
+      weight: 1, source: 'photo', score: g.score, letter: g.letter, benchmark: g.benchmark,
+      benchmarkNote: g.benchmarkNote, rubric: g.rubric || [], strengths: g.strengths || [],
+      improvements: g.improvements || [], summary: g.summary, teacherNote: g.teacherNote, aiGenerated: true,
+    });
+    const a = d.answers.find(x => x.id === sub.id); if (a) { a.status = 'approved'; a.parentNote = ''; }
+  });
 
   return (
     <div>
@@ -55,16 +72,27 @@ export function Review({ db, mut, onGradeThis }) {
         const wk      = getMon(sub.date);
         const pk      = `${gg?.id}:${wk}`;
         const lesson  = db.plans[pk]?.[sub.date]?.find(l=>l.subjectId===sub.subjectId);
-        return <SubCard key={sub.id} sub={sub} student={student} subj={subj} lesson={lesson} questions={lesson?.questions||[]} onApprove={()=>approve(sub.id)} onRevise={note=>revise(sub.id,note)} onGradeThis={onGradeThis} />;
+        return <SubCard key={sub.id} sub={sub} student={student} subj={subj} lesson={lesson} questions={lesson?.questions||[]} onApprove={()=>approve(sub.id)} onRevise={note=>revise(sub.id,note)} onGradeThis={onGradeThis} onSaveGrade={()=>saveAiGrade(sub)} />;
       })}
     </div>
   );
 }
 
 
-function SubCard({ sub, student, subj, lesson, questions, onApprove, onRevise, onGradeThis }) {
+function SubCard({ sub, student, subj, lesson, questions, onApprove, onRevise, onGradeThis, onSaveGrade }) {
   const [revNote, setRN] = useState(sub.parentNote||'');
   const [showRev, setSR] = useState(false);
+  const [photoUrls, setPhotoUrls] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      if (!sub.photos?.length) return;
+      const { data } = await supabase.storage.from('work-photos').createSignedUrls(sub.photos, 3600);
+      if (active && data) setPhotoUrls(data.map(d => d.signedUrl).filter(Boolean));
+    })();
+    return () => { active = false; };
+  }, [sub.photos]);
 
   // Assemble the student's written work into a clean block the grader can read.
   const gradeText = () => {
@@ -127,6 +155,32 @@ function SubCard({ sub, student, subj, lesson, questions, onApprove, onRevise, o
           </div>
         </div>
       ))}
+
+      {sub.photos?.length > 0 && (
+        <div style={{ marginBottom:12 }}>
+          <div style={lbl}>Photo of work</div>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            {photoUrls.length ? photoUrls.map((u, i) => (
+              <a key={i} href={u} target="_blank" rel="noreferrer"><img src={u} alt={`work ${i+1}`} style={{ width:100, height:100, objectFit:'cover', borderRadius:10, border:`1px solid ${C.border}` }} /></a>
+            )) : <span style={{ fontSize:12, color:C.muted }}>{sub.photos.length} photo{sub.photos.length!==1?'s':''} attached…</span>}
+          </div>
+        </div>
+      )}
+
+      {sub.aiGrade && (
+        <div style={{ marginBottom:12, background:'#FBF5E7', border:'1px solid #EBD9AE', borderRadius:10, padding:'12px 14px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+            <span style={{ fontSize:11.5, fontWeight:800, color:C.gold, textTransform:'uppercase', letterSpacing:'0.06em' }}>AI suggested grade</span>
+            <span style={{ fontFamily:'Georgia,serif', fontWeight:'bold', fontSize:18, color:C.navy }}>{sub.aiGrade.letter} · {Math.round(sub.aiGrade.score)}%</span>
+            {sub.aiGrade.benchmark && BENCH[sub.aiGrade.benchmark] && <BenchBadge k={sub.aiGrade.benchmark} small />}
+          </div>
+          {sub.aiGrade.summary && <div style={{ fontSize:13, color:'#4b5563', marginTop:6, lineHeight:1.5 }}>{sub.aiGrade.summary}</div>}
+          {sub.status!=='approved' && onSaveGrade && (
+            <Btn onClick={onSaveGrade} style={{ background:C.navy, color:'white', marginTop:10 }}>✓ Save this grade</Btn>
+          )}
+          <div style={{ fontSize:11, color:C.muted, marginTop:6 }}>Review it first — saving adds it to {student?.name}'s report card.</div>
+        </div>
+      )}
 
       {(sub.status!=='approved' || (onGradeThis && hasWork)) && (
         <div style={{ display:'flex', gap:8, marginTop:12, flexWrap:'wrap', alignItems:'center' }}>
