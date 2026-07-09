@@ -331,6 +331,7 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
   const [photos, setPhotos]     = useState([]);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [grading, setGrading]   = useState(false);
+  const [photoErr, setPhotoErr] = useState('');
 
   const status = submission?.status;
   const statusLabel = { approved:'✅ Approved', needs_revision:'↩ Needs revision', pending:'⏳ Awaiting review', draft:'📝 In progress' };
@@ -353,20 +354,23 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
   const onPickPhotos = async (fileList) => {
     const files = Array.from(fileList || []).slice(0, 5 - photos.length);
     if (!files.length) return;
-    setPhotoBusy(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    const uid = user?.id;
-    const added = [];
+    setPhotoBusy(true); setPhotoErr('');
+    let uid = null;
+    try { const { data: { session } } = await supabase.auth.getSession(); uid = session?.user?.id; } catch { /* */ }
+    if (!uid) { setPhotoErr('You appear signed out — reload and try again.'); setPhotoBusy(false); return; }
+    const added = []; let lastErr = '';
     for (const file of files) {
       try {
         const img = await fileToGradeImage(file);
         const path = `${uid}/${lesson.subjectId}-${Date.now()}-${Math.random().toString(36).slice(2,7)}.jpg`;
         const blob = await dataUrlToBlob(img.preview);
         const { error } = await supabase.storage.from('work-photos').upload(path, blob, { contentType:'image/jpeg', upsert:false });
-        if (!error) added.push({ path, preview: img.preview, data: img.data, media_type: img.media_type });
-      } catch { /* skip this file */ }
+        if (error) lastErr = error.message || String(error);
+        else added.push({ path, preview: img.preview, data: img.data, media_type: img.media_type });
+      } catch (e) { lastErr = String(e?.message || e); }
     }
-    setPhotos(prev => [...prev, ...added].slice(0, 5));
+    if (added.length) setPhotos(prev => [...prev, ...added].slice(0, 5));
+    if (!added.length && lastErr) setPhotoErr('Upload failed: ' + lastErr);
     setPhotoBusy(false);
   };
 
@@ -532,6 +536,7 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
                   <input type="file" accept="image/*" capture="environment" multiple disabled={photoBusy} onChange={e => onPickPhotos(e.target.files)} style={{ display:'none' }} />
                 </label>
               )}
+              {photoErr && <div style={{ color:C.red, fontSize:12.5, marginTop:8 }}>{photoErr}</div>}
             </div>
           )}
 
