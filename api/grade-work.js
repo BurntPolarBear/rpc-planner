@@ -22,7 +22,7 @@ export default async function handler(req, res) {
   const rigor      = body?.rigor === 'rigorous' ? 'rigorous' : 'standard';
   const title      = (body?.title || '').trim();
   const text       = (body?.text || '').trim();
-  const images     = Array.isArray(body?.images) ? body.images.slice(0, 5) : [];
+  const images     = Array.isArray(body?.images) ? body.images.slice(0, 10) : [];
   // Optional assignment-type preset (from the Grades composer). Shapes which rubric
   // categories the AI builds; it never sets the score. Capped as untrusted input.
   const assignmentType = (body?.assignmentType || '').trim().slice(0, 200);

@@ -119,12 +119,12 @@ function GradeComposer({ db, mut, student, gg, onDone, prefill, onPrefillConsume
   const choosePost = (p) => { setTitle(p.title || ''); setText(p.text || ''); setPostList(null); setProposal(null); };
 
   const onFiles = async (fileList) => {
-    const files = Array.from(fileList || []).slice(0, 5 - images.length);
+    const files = Array.from(fileList || []).slice(0, 10 - images.length);
     if (!files.length) return;
     setImgBusy(true); setError(null);
     const out = [];
     for (const f of files) { try { out.push(await fileToGradeImage(f)); } catch { /* skip */ } }
-    setImages(prev => [...prev, ...out].slice(0, 5));
+    setImages(prev => [...prev, ...out].slice(0, 10));
     setImgBusy(false);
   };
 

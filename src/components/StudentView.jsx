@@ -352,7 +352,7 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
   };
 
   const onPickPhotos = async (fileList) => {
-    const files = Array.from(fileList || []).slice(0, 5 - photos.length);
+    const files = Array.from(fileList || []).slice(0, 10 - photos.length);
     if (!files.length) return;
     setPhotoBusy(true); setPhotoErr('');
     let uid = null;
@@ -369,7 +369,7 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
         else added.push({ path, preview: img.preview, data: img.data, media_type: img.media_type });
       } catch (e) { lastErr = String(e?.message || e); }
     }
-    if (added.length) setPhotos(prev => [...prev, ...added].slice(0, 5));
+    if (added.length) setPhotos(prev => [...prev, ...added].slice(0, 10));
     if (!added.length && lastErr) setPhotoErr('Upload failed: ' + lastErr);
     setPhotoBusy(false);
   };
@@ -530,7 +530,7 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
                   ))}
                 </div>
               )}
-              {photos.length < 5 && (
+              {photos.length < 10 && (
                 <label style={{ display:'inline-flex', alignItems:'center', gap:8, background:'#EEF4FB', color:C.navy, border:`1px solid ${C.border}`, borderRadius:10, padding:'10px 14px', fontSize:13, fontWeight:600, cursor: photoBusy ? 'default' : 'pointer' }}>
                   {photoBusy ? 'Uploading…' : (photos.length ? '＋ Add another photo' : '📷 Add a photo of your work')}
                   <input type="file" accept="image/*" capture="environment" multiple disabled={photoBusy} onChange={e => onPickPhotos(e.target.files)} style={{ display:'none' }} />
