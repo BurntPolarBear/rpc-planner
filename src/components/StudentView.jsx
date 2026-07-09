@@ -332,6 +332,7 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
   const [photoBusy, setPhotoBusy] = useState(false);
   const [grading, setGrading]   = useState(false);
   const [photoErr, setPhotoErr] = useState('');
+  const [editing, setEditing] = useState(false);
 
   const status = submission?.status;
   const statusLabel = { approved:'✅ Approved', needs_revision:'↩ Needs revision', pending:'⏳ Awaiting review', draft:'📝 In progress' };
@@ -401,7 +402,7 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
     const extra = {};
     if (photos.length) { extra.photos = photos.map(p => p.path); if (aiGrade) extra.aiGrade = aiGrade; }
     onSave(ans, doneT, extra);
-    setPhotos([]);
+    setPhotos([]); setEditing(false);
     setFlash(true); setTimeout(() => setFlash(false), 2000);
   };
 
@@ -540,8 +541,17 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
             </div>
           )}
 
-          {/* Submit */}
-          {!readOnly && (hasQuestions || photos.length > 0) && status!=='approved' && (
+          {/* Submit / submitted confirmation */}
+          {!readOnly && status === 'pending' && !editing ? (
+            <div style={{ background:'#EAF7EE', border:'1px solid #A7E3BC', borderRadius:10, padding:'12px 14px', display:'flex', alignItems:'center', gap:11 }}>
+              <span style={{ width:28, height:28, borderRadius:'50%', background:C.green, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0 }}>✓</span>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:'#166534' }}>Submitted — awaiting review</div>
+                <div style={{ fontSize:12, color:'#3F7C53' }}>Your work is in. A parent will review it soon.</div>
+              </div>
+              <button onClick={() => setEditing(true)} style={{ background:'none', border:'none', color:C.gold, fontSize:12.5, fontWeight:700, cursor:'pointer', flexShrink:0 }}>Edit</button>
+            </div>
+          ) : (!readOnly && (hasQuestions || photos.length > 0) && status !== 'approved' && (
             <button onClick={doSubmit} disabled={grading} style={{
               border:'none', borderRadius:8, padding:'11px 0', cursor: grading ? 'default' : 'pointer', fontSize:14,
               fontWeight:700, width:'100%', transition:'background .2s',
@@ -549,7 +559,7 @@ function LessonCard({ subj, lesson, submission, onSave, onComplete, onTasksChang
             }}>
               {grading ? 'Grading your work…' : flash ? '✓ Submitted!' : (photos.length > 0 ? 'Submit work' : 'Submit answers')}
             </button>
-          )}
+          ))}
         </div>
       )}
     </div>
