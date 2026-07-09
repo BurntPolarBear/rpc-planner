@@ -1,12 +1,28 @@
-// Browser-side photo helpers. Downscale a picked image to a compact JPEG (keeps
-// uploads and AI payloads small) and convert a data URL to a Blob for upload.
-export async function fileToGradeImage(file, maxEdge = 1500, quality = 0.72) {
-  const dataUrl = await new Promise((resolve, reject) => {
+// Browser-side photo helpers. Apple devices default to HEIC, which browsers can't
+// draw to a canvas (and the AI grader needs JPEG/PNG), so HEIC is converted first.
+// Then the image is downscaled to a compact JPEG to keep uploads and AI payloads small.
+
+function readAsDataURL(blob) {
+  return new Promise((resolve, reject) => {
     const fr = new FileReader();
     fr.onload = () => resolve(fr.result);
     fr.onerror = () => reject(new Error('read failed'));
-    fr.readAsDataURL(file);
+    fr.readAsDataURL(blob);
   });
+}
+
+async function toDecodableBlob(file) {
+  const isHeic = /heic|heif/i.test(file.type || '') || /\.(heic|heif)$/i.test(file.name || '');
+  if (!isHeic) return file;
+  // heic2any pulls in a large WASM decoder — load it only when a HEIC is picked.
+  const heic2any = (await import('heic2any')).default;
+  const out = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+  return Array.isArray(out) ? out[0] : out;
+}
+
+export async function fileToGradeImage(file, maxEdge = 1500, quality = 0.72) {
+  const source = await toDecodableBlob(file);
+  const dataUrl = await readAsDataURL(source);
   const img = await new Promise((resolve, reject) => {
     const im = new Image();
     im.onload = () => resolve(im);
