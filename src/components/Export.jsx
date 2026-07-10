@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { toDate, weekDays, weekLabel } from '../utils/dates';
 import { Btn, C, card, inp } from '../utils/theme';
 import { PortfolioView } from './Portfolio';
+import { TranscriptView } from './Transcript';
 
 
 // ─── EXPORT HELPERS ───────────────────────────────────────────────────────────
@@ -98,7 +99,7 @@ export function ExportView({ db, weekMon, setWk }) {
     <div>
       {/* Segmented control — hidden on print so only the chosen document prints */}
       <div className="no-print" style={{ display:'flex', gap:8, marginBottom:18, flexWrap:'wrap' }}>
-        {[['week','📅 Weekly Plan'], ['portfolio','📚 Year-End Portfolio']].map(([id, label]) => (
+        {[['week','📅 Weekly Plan'], ['portfolio','📚 Year-End Portfolio'], ['transcript','🎓 Transcript']].map(([id, label]) => (
           <Btn key={id} onClick={()=>setMode(id)} style={{
             background: mode===id ? C.gold : 'white', color: mode===id ? 'white' : C.muted,
             border:`1px solid ${mode===id ? C.gold : C.border}`,
@@ -106,9 +107,9 @@ export function ExportView({ db, weekMon, setWk }) {
         ))}
       </div>
 
-      {mode === 'week'
-        ? <WeeklyExport db={db} weekMon={weekMon} setWk={setWk} />
-        : <PortfolioView db={db} />}
+      {mode === 'week' && <WeeklyExport db={db} weekMon={weekMon} setWk={setWk} />}
+      {mode === 'portfolio' && <PortfolioView db={db} />}
+      {mode === 'transcript' && <TranscriptView db={db} />}
     </div>
   );
 }
