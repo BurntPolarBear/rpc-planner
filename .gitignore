@@ -24,3 +24,6 @@ Thumbs.db
 
 # temp test bundle
 .rectest.mjs
+
+# vite-plugin-pwa dev output
+dev-dist/
