@@ -104,7 +104,7 @@ Respond with ONLY valid JSON, no markdown fences, in exactly this shape:
       headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-5',
-        max_tokens: 2600,
+        max_tokens: 4096,
         messages: [{ role: 'user', content }],
       }),
     });
@@ -118,9 +118,13 @@ Respond with ONLY valid JSON, no markdown fences, in exactly this shape:
     let out = (data.content || []).map(b => b.text || '').join('').trim();
     out = out.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
-    let parsed;
-    try { parsed = JSON.parse(out); }
-    catch { return res.status(502).json({ error: 'The AI returned an unexpected format. Try again.' }); }
+    let parsed = null;
+    try { parsed = JSON.parse(out); } catch { /* fall through to extraction */ }
+    if (!parsed) {
+      const first = out.indexOf('{'), last = out.lastIndexOf('}');
+      if (first !== -1 && last > first) { try { parsed = JSON.parse(out.slice(first, last + 1)); } catch { /* */ } }
+    }
+    if (!parsed) return res.status(502).json({ error: 'The AI returned an unexpected format. Try again.' });
 
     return res.status(200).json({ grade: parsed });
   } catch (err) {
