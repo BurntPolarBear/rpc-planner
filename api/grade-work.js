@@ -104,7 +104,7 @@ Respond with ONLY valid JSON, no markdown fences, in exactly this shape:
       headers: { 'content-type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-5',
-        max_tokens: 4096,
+        max_tokens: 8000,
         messages: [{ role: 'user', content }],
       }),
     });
