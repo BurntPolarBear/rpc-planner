@@ -111,6 +111,7 @@ Respond with ONLY valid JSON, no markdown fences, in exactly this shape:
 
     if (!aiRes.ok) {
       const detail = await aiRes.text();
+      console.error('[grade-work] AI HTTP', aiRes.status, detail.slice(0, 800));
       return res.status(502).json({ error: 'The AI service returned an error.', detail });
     }
 
@@ -124,7 +125,12 @@ Respond with ONLY valid JSON, no markdown fences, in exactly this shape:
       const first = out.indexOf('{'), last = out.lastIndexOf('}');
       if (first !== -1 && last > first) { try { parsed = JSON.parse(out.slice(first, last + 1)); } catch { /* */ } }
     }
-    if (!parsed) return res.status(502).json({ error: 'The AI returned an unexpected format. Try again.' });
+    if (!parsed) {
+      console.error('[grade-work] parse fail. stop_reason=', data?.stop_reason,
+        'outLen=', out.length, 'contentTypes=', JSON.stringify((data.content||[]).map(b=>b.type)),
+        'outHead=', JSON.stringify(out.slice(0, 500)));
+      return res.status(502).json({ error: 'The AI returned an unexpected format. Try again.' });
+    }
 
     return res.status(200).json({ grade: parsed });
   } catch (err) {
